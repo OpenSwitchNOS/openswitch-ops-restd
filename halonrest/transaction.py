@@ -23,3 +23,7 @@ class OvsdbTransaction:
 
     def abort(self):
         self.txn.abort()
+
+    def get_db_error_msg(self):
+        db_dict = self.txn.get_error()
+        return db_dict['details']
