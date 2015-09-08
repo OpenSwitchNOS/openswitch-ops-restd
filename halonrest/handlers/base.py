@@ -1,5 +1,6 @@
 from tornado.ioloop import IOLoop
 from tornado import web, gen, locks
+from tornado.log import app_log
 
 import json
 import httplib
@@ -34,11 +35,18 @@ class AutoHandler(BaseHandler):
     # parse the url and http params.
     def prepare(self):
 
+        app_log.debug("Processing request from client: %s" % self.request.remote_ip)
+        app_log.debug("Request received: %s" % self.request)
+
         self.resource_path = parse_url_path(self.request.path, self.schema, self.idl, self.request.method)
 
         if self.resource_path is None:
+            app_log.debug("Invalid URL! Cannot process blank URL")
             self.set_status(httplib.NOT_FOUND)
             self.finish()
+
+    def on_finish(self):
+        app_log.debug("Request from client %s processed!" % self.request.remote_ip)
 
     @gen.coroutine
     def get(self):
@@ -48,8 +56,10 @@ class AutoHandler(BaseHandler):
         result = get.get_resource(self.idl, self.resource_path, self.schema, self.request.path, selector)
 
         if result is None:
+            app_log.debug("Invalid URL! Requested URL does not exists.")
             self.set_status(httplib.NOT_FOUND)
         else:
+            app_log.debug("Valid URL! Requested URL found.")
             self.set_status(httplib.OK)
             self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
             self.write(json.dumps(result))
@@ -69,6 +79,7 @@ class AutoHandler(BaseHandler):
 
                 # post_resource performs data verficiation, prepares and commits the ovsdb transaction
                 result = post.post_resource(post_data, self.resource_path, self.schema, self.txn, self.idl)
+                app_log.debug("Request validation result: %s" % result)
 
                 if result == INCOMPLETE:
                     self.ref_object.manager.monitor_transaction(self.txn)
@@ -77,13 +88,16 @@ class AutoHandler(BaseHandler):
                     result = self.txn.status
 
                 if self.successful_transaction(result):
+                    app_log.debug("Successful transaction!")
                     self.set_status(httplib.CREATED)
 
-            except ValueError, e:
+            except Exception, e:
+                app_log.debug("Exception caught! %s" % e)
                 self.set_status(httplib.BAD_REQUEST)
                 self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
                 self.write(to_json_error(e))
         else:
+            app_log.debug("No HTTP_HEADER_CONTENT_LENGTH found! Aborting.")
             self.set_status(httplib.LENGTH_REQUIRED)
 
         self.finish()
@@ -109,13 +123,16 @@ class AutoHandler(BaseHandler):
                     result = self.txn.status
 
                 if self.successful_transaction(result):
+                    app_log.debug("Successful transaction!")
                     self.set_status(httplib.OK)
 
-            except ValueError, e:
+            except Exception, e:
+                app_log.debug("Exception caught! %s" % e)
                 self.set_status(httplib.BAD_REQUEST)
                 self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
                 self.write(to_json_error(e))
         else:
+            app_log.debug("No HTTP_HEADER_CONTENT_LENGTH found! Aborting.")
             self.set_status(httplib.LENGTH_REQUIRED)
 
         self.finish()
@@ -134,6 +151,7 @@ class AutoHandler(BaseHandler):
             result = self.txn.status
 
         if self.successful_transaction(result):
+            app_log.debug("Successful transaction!")
             self.set_status(httplib.NO_CONTENT)
 
         self.finish()
@@ -143,6 +161,7 @@ class AutoHandler(BaseHandler):
         if result == SUCCESS or result == UNCHANGED:
             return True
 
+        app_log.debug("Transaction failed!")
         self.txn.abort()
 
         if result == ERROR:
