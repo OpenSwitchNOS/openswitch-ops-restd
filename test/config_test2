@@ -1,0 +1,882 @@
+{
+    "Interface": {
+        "1": {
+            "external_ids": {},
+            "name": "1",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "10": {
+            "external_ids": {},
+            "name": "10",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "11": {
+            "external_ids": {},
+            "name": "11",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "12": {
+            "external_ids": {},
+            "name": "12",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "13": {
+            "external_ids": {},
+            "name": "13",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "14": {
+            "external_ids": {},
+            "name": "14",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "15": {
+            "external_ids": {},
+            "name": "15",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "16": {
+            "external_ids": {},
+            "name": "16",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "17": {
+            "external_ids": {},
+            "name": "17",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "18": {
+            "external_ids": {},
+            "name": "18",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "19": {
+            "external_ids": {},
+            "name": "19",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "2": {
+            "external_ids": {},
+            "name": "2",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "20": {
+            "external_ids": {},
+            "name": "20",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "21": {
+            "external_ids": {},
+            "name": "21",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "22": {
+            "external_ids": {},
+            "name": "22",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "23": {
+            "external_ids": {},
+            "name": "23",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "24": {
+            "external_ids": {},
+            "name": "24",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "25": {
+            "external_ids": {},
+            "name": "25",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "26": {
+            "external_ids": {},
+            "name": "26",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "27": {
+            "external_ids": {},
+            "name": "27",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "28": {
+            "external_ids": {},
+            "name": "28",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "29": {
+            "external_ids": {},
+            "name": "29",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "3": {
+            "external_ids": {},
+            "name": "3",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "30": {
+            "external_ids": {},
+            "name": "30",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "31": {
+            "external_ids": {},
+            "name": "31",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "32": {
+            "external_ids": {},
+            "name": "32",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "33": {
+            "external_ids": {},
+            "name": "33",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "34": {
+            "external_ids": {},
+            "name": "34",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "35": {
+            "external_ids": {},
+            "name": "35",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "36": {
+            "external_ids": {},
+            "name": "36",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "37": {
+            "external_ids": {},
+            "name": "37",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "38": {
+            "external_ids": {},
+            "name": "38",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "39": {
+            "external_ids": {},
+            "name": "39",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "4": {
+            "external_ids": {},
+            "name": "4",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "40": {
+            "external_ids": {},
+            "name": "40",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "41": {
+            "external_ids": {},
+            "name": "41",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "42": {
+            "external_ids": {},
+            "name": "42",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "43": {
+            "external_ids": {},
+            "name": "43",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "44": {
+            "external_ids": {},
+            "name": "44",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "45": {
+            "external_ids": {},
+            "name": "45",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "46": {
+            "external_ids": {},
+            "name": "46",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "47": {
+            "external_ids": {},
+            "name": "47",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "48": {
+            "external_ids": {},
+            "name": "48",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "49": {
+            "external_ids": {},
+            "name": "49",
+            "options": {},
+            "other_config": {},
+            "split_children": [
+                "49-3",
+                "49-1",
+                "49-2",
+                "49-4"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "49-1": {
+            "external_ids": {},
+            "name": "49-1",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "49"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "49-2": {
+            "external_ids": {},
+            "name": "49-2",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "49"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "49-3": {
+            "external_ids": {},
+            "name": "49-3",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "49"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "49-4": {
+            "external_ids": {},
+            "name": "49-4",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "49"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "5": {
+            "external_ids": {},
+            "name": "5",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "50": {
+            "external_ids": {},
+            "name": "50",
+            "options": {},
+            "other_config": {},
+            "split_children": [
+                "50-1",
+                "50-4",
+                "50-3",
+                "50-2"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "50-1": {
+            "external_ids": {},
+            "name": "50-1",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "50"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "50-2": {
+            "external_ids": {},
+            "name": "50-2",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "50"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "50-3": {
+            "external_ids": {},
+            "name": "50-3",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "50"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "50-4": {
+            "external_ids": {},
+            "name": "50-4",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "50"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "51": {
+            "external_ids": {},
+            "name": "51",
+            "options": {},
+            "other_config": {},
+            "split_children": [
+                "51-3",
+                "51-2",
+                "51-1",
+                "51-4"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "51-1": {
+            "external_ids": {},
+            "name": "51-1",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "51"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "51-2": {
+            "external_ids": {},
+            "name": "51-2",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "51"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "51-3": {
+            "external_ids": {},
+            "name": "51-3",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "51"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "51-4": {
+            "external_ids": {},
+            "name": "51-4",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "51"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "52": {
+            "external_ids": {},
+            "name": "52",
+            "options": {},
+            "other_config": {},
+            "split_children": [
+                "52-1",
+                "52-4",
+                "52-3",
+                "52-2"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "52-1": {
+            "external_ids": {},
+            "name": "52-1",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "52"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "52-2": {
+            "external_ids": {},
+            "name": "52-2",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "52"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "52-3": {
+            "external_ids": {},
+            "name": "52-3",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "52"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "52-4": {
+            "external_ids": {},
+            "name": "52-4",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "52"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "53": {
+            "external_ids": {},
+            "name": "53",
+            "options": {},
+            "other_config": {},
+            "split_children": [
+                "53-2",
+                "53-4",
+                "53-1",
+                "53-3"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "53-1": {
+            "external_ids": {},
+            "name": "53-1",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "53"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "53-2": {
+            "external_ids": {},
+            "name": "53-2",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "53"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "53-3": {
+            "external_ids": {},
+            "name": "53-3",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "53"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "53-4": {
+            "external_ids": {},
+            "name": "53-4",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "53"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "54": {
+            "external_ids": {},
+            "name": "54",
+            "options": {},
+            "other_config": {},
+            "split_children": [
+                "54-4",
+                "54-1",
+                "54-2",
+                "54-3"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "54-1": {
+            "external_ids": {},
+            "name": "54-1",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "54"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "54-2": {
+            "external_ids": {},
+            "name": "54-2",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "54"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "54-3": {
+            "external_ids": {},
+            "name": "54-3",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "54"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "54-4": {
+            "external_ids": {},
+            "name": "54-4",
+            "options": {},
+            "other_config": {},
+            "split_parent": [
+                "54"
+            ],
+            "type": "",
+            "user_config": {}
+        },
+        "6": {
+            "external_ids": {},
+            "name": "6",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "7": {
+            "external_ids": {},
+            "name": "7",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "8": {
+            "external_ids": {},
+            "name": "8",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        },
+        "9": {
+            "external_ids": {},
+            "name": "9",
+            "options": {},
+            "other_config": {},
+            "type": "",
+            "user_config": {}
+        }
+    },
+    "Open_vSwitch": {
+        "5137fde3-6efa-4a51-b9d9-bfb2ce83472f": {
+            "aaa": {
+                "fallback": "false",
+                "radius": "false",
+                "ssh_passkeyauthentication": "enable",
+                "ssh_publickeyauthentication": "enable"
+            },
+            "asset_tag_number": "",
+            "bridges": {
+                "bridge_normal": {
+                    "datapath_type": "",
+                    "external_ids": {},
+                    "name": "bridge_normal",
+                    "other_config": {}
+                }
+            },
+            "bufmon_config": {},
+            "dns_servers": [],
+            "ecmp_config": {},
+            "external_ids": {},
+            "hostname": "",
+            "lacp_config": {},
+            "logrotate_config": {},
+            "mgmt_intf": {
+                "name": "eth0"
+            },
+            "other_config": {},
+            "subsystems": {
+                "base": {
+                    "asset_tag_number": "Open Halon asset tag 222",
+                    "external_ids": {},
+                    "interfaces": [
+                        "51-3",
+                        "49-3",
+                        "53",
+                        "33",
+                        "9",
+                        "54-4",
+                        "29",
+                        "3",
+                        "6",
+                        "35",
+                        "51",
+                        "36",
+                        "16",
+                        "38",
+                        "25",
+                        "18",
+                        "1",
+                        "19",
+                        "41",
+                        "48",
+                        "30",
+                        "49-1",
+                        "54",
+                        "4",
+                        "49",
+                        "42",
+                        "52-1",
+                        "53-2",
+                        "31",
+                        "52",
+                        "34",
+                        "53-4",
+                        "54-1",
+                        "12",
+                        "50-1",
+                        "39",
+                        "51-2",
+                        "44",
+                        "37",
+                        "17",
+                        "54-2",
+                        "26",
+                        "10",
+                        "11",
+                        "32",
+                        "28",
+                        "51-1",
+                        "5",
+                        "45",
+                        "13",
+                        "24",
+                        "52-4",
+                        "15",
+                        "50-4",
+                        "46",
+                        "51-4",
+                        "8",
+                        "50",
+                        "40",
+                        "2",
+                        "27",
+                        "20",
+                        "7",
+                        "50-3",
+                        "52-3",
+                        "53-1",
+                        "53-3",
+                        "21",
+                        "22",
+                        "50-2",
+                        "52-2",
+                        "47",
+                        "43",
+                        "23",
+                        "49-2",
+                        "14",
+                        "54-3",
+                        "49-4"
+                    ],
+                    "other_config": {}
+                }
+            },
+            "vrfs": {
+                "vrf_default": {
+                    "Route": {
+                    },
+                    "external_ids": {},
+                    "name": "vrf_default",
+                    "other_config": {}
+                }
+            }
+        }
+    },
+    "Port": {
+        "p1": {
+            "bond_active_slave": [],
+            "bond_mode": [],
+            "bond_options": {},
+            "external_ids": {},
+            "ip4_address": [],
+            "ip4_address_secondary": [],
+            "ip6_address": [],
+            "ip6_address_secondary": [],
+            "lacp": [],
+            "mac": [],
+            "name": "p1",
+            "other_config": {},
+            "tag": [],
+            "trunks": [],
+            "vlan_mode": [],
+            "vlan_options": {}
+        }
+    }
+}
