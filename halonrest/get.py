@@ -121,12 +121,21 @@ def get_column_json(column, row, table, schema, idl, uri):
     db_row = db_table.rows[row]
     db_col = db_row.__getattr__(column)
 
-    # column is a reference. Get the table name
-    col_table = schema.ovs_tables[table].references[column].ref_table
-    indexes = schema.ovs_tables[col_table].indexes
+    current_table = schema.ovs_tables[table]
 
-    if schema.ovs_tables[col_table].parent is None:
-        uri = OVSDB_BASE_URI + schema.ovs_tables[col_table].plural_name
+    # column is a reference. Get the table name
+    col_table = current_table.references[column].ref_table
+    column_table = schema.ovs_tables[col_table]
+
+    indexes = column_table.indexes
+
+    if column_table.parent is None:
+        uri = OVSDB_BASE_URI + column_table.plural_name
+    elif column_table.parent == current_table.name:
+        # If we are at a child reference URI we don't add the column path.
+        if column_table.plural_name not in uri:
+            uri = uri.rstrip('/')
+            uri += '/' + column_table.plural_name
 
     uri_list = []
     for row in db_col:
