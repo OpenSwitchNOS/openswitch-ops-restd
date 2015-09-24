@@ -30,12 +30,12 @@ import ovs.util
 import ovs.daemon
 import ovs.db.idl
 
-from halonlib.restparser import OVSColumn
-from halonlib.restparser import OVSReference
-from halonlib.restparser import OVSTable
-from halonlib.restparser import RESTSchema
-from halonlib.restparser import normalizeName
-from halonlib.restparser import parseSchema
+from opslib.restparser import OVSColumn
+from opslib.restparser import OVSReference
+from opslib.restparser import OVSTable
+from opslib.restparser import RESTSchema
+from opslib.restparser import normalizeName
+from opslib.restparser import parseSchema
 
 
 def addCommonResponse(responses):
