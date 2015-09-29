@@ -71,24 +71,13 @@ class RunConfigUtil():
             return
 
         for column_name, column in table.config.iteritems():
-            rowobj[column_name] = row.__getattr__(column_name)
-        for child_name in table.children:
-            table_schema = self.restschema.ovs_tables[table.name]
+            rowobj[column_name] = utils.to_json(row.__getattr__(column_name))
 
-            index_map = {}
+        for child_name in table.children:
+
             if child_name in table.references:
-                reference = table_schema.references[child_name]
-                kv_type = reference.kv_type
                 column = table.references[child_name]
                 refdata = row.__getattr__(child_name)
-
-                if kv_type and type(refdata) is types.DictType:
-                    v = []
-                    for key, value in refdata.iteritems():
-                        index_map[value.uuid] = key
-                        v.append(value)
-
-                    refdata = v
 
                 reflist = []
                 for i in range(0, len(refdata)):
@@ -99,7 +88,7 @@ class RunConfigUtil():
                     tabledata = \
                         self.get_table_data(column.ref_table,
                                             table_,
-                                            reflist, index_map)
+                                            reflist)
                     if len(tabledata) > 0:
                         rowobj[child_name] = tabledata
             else:
@@ -153,8 +142,7 @@ class RunConfigUtil():
 
         return tableobj
 
-    def get_table_data(self, table_name, schema_table, uuid_list=None,
-                       index_map={}):
+    def get_table_data(self, table_name, schema_table, uuid_list=None):
 
         tableobj = {}
         dbtable = self.idl.tables[table_name]
@@ -173,12 +161,8 @@ class RunConfigUtil():
                 if table_name == 'System':
                     tableobj = rowdata
                 else:
-                    if index_map:
-                        index_ = index_map[item.uuid]
-                    else:
-                        index_ = utils.row_to_index(schema_table,
-                                                    item, self.uuid_seq)
-                    tableobj[index_] = rowdata
+                    tableobj[utils.row_to_index(schema_table,
+                                                item, self.uuid_seq)] = rowdata
 
         return tableobj
 
@@ -251,17 +235,14 @@ class RunConfigUtil():
         return False
 
     def setup_row(self, index_values, table, row_data,
-                  txn, reflist, parent=None, old_row=None):
+                  txn, reflist, parent=None):
 
         # find out if this row exists
         # If table is System, return first row from table
         if table == 'System':
             row = self.idl.tables[table].rows.values()[0]
         else:
-            if old_row is not None:
-                row = old_row
-            else:
-                row = utils.index_to_row(index_values,
+            row = utils.index_to_row(index_values,
                                      self.restschema.ovs_tables[table],
                                      self.idl.tables[table])
 
@@ -309,28 +290,17 @@ class RunConfigUtil():
                     # Deep cleanup children, even if missing or empty,
                     #if can't delete because immutable
                     if key in references:
-                        kv_type = references[key].kv_type
-                        if kv_type:
-                            rowlist = row.__getattr__(key).values()
-                        else:
-                            rowlist = row.__getattr__(key)
                         self.clean_subtree(child_table,
-                                           rowlist, txn)
+                                           row.__getattr__(key),
+                                           txn)
                     else:
                         self.clean_subtree(child_table, [], txn, row)
                 continue
 
             # forward child references
             if key in references:
-                table_schema = self.restschema.ovs_tables[table]
-                reference = table_schema.references[key]
-                kv_type = reference.kv_type
-
                 if not is_new and key not in row_data:
-                    if kv_type:
-                        row.__setattr__(key, {})
-                    else:
-                        row.__setattr__(key, [])
+                    row.__setattr__(key, [])
             else:
                 # back-references
                 if child_table not in row_data:
@@ -348,22 +318,9 @@ class RunConfigUtil():
 
                 # forward child references
                 if key in references:
-                    table_schema = self.restschema.ovs_tables[table]
-                    reference = table_schema.references[key]
-                    kv_type = reference.kv_type
-                    kv_key_type = None
-                    current_child_rows = {}
-
-                    if kv_type:
-                        kv_key_type = reference.kv_key_type
-                        current_child_rows = row.__getattr__(key)
                     child_reference_list = self.setup_table(child_table,
                                                             row_data[key],
-                                                            txn, reflist,
-                                                            None, kv_type,
-                                                            kv_key_type,
-                                                            current_child_rows)
-
+                                                            txn, reflist)
                     if child_table not in immutable_tables:
                         row.__setattr__(key, child_reference_list)
                 else:
@@ -413,19 +370,11 @@ class RunConfigUtil():
         # clean children
         for key in children:
             if key in references:
-                kv_type = references[key].kv_type
                 child_table = references[key].ref_table
                 if child_table not in immutable_tables:
-                    if kv_type:
-                        row.__setattr__(key, {})
-                    else:
-                        row.__setattr__(key, [])
+                    row.__setattr__(key, [])
                 else:
-                    if kv_type:
-                        rowlist = row.__getattr__(key).values()
-                    else:
-                        rowlist = row.__getattr__(key)
-                    self.clean_subtree(child_table, rowlist, txn)
+                    self.clean_subtree(child_table, row.__getattr__(key), txn)
             else:
                 child_table = key
                 self.clean_subtree(child_table, [], txn, row)
@@ -442,8 +391,7 @@ class RunConfigUtil():
             if val.relation == 'reference' and val.mutable:
                 row.__setattr__(key, [])
 
-    def setup_table(self, table, table_data, txn, reflist, parent=None,
-                    kv_type=False, kv_key_type=None, current_rows={}):
+    def setup_table(self, table, table_data, txn, reflist, parent=None):
 
         config_keys = self.restschema.ovs_tables[table].config.keys()
         reference_keys = self.restschema.ovs_tables[table].references.keys()
@@ -458,26 +406,13 @@ class RunConfigUtil():
 
         # iterate over each row
         rows = []
-        kv_index_list = []
         for index, row_data in table_data.iteritems():
-            current_row = None
-            if kv_type:
-                if (kv_key_type is not None and
-                        kv_key_type.name == 'integer'):
-                    index = int(index)
-                if index in current_rows:
-                    current_row = current_rows[index]
-                index_values = []
-            else:
-                index_values = utils.escaped_split(index)
-
+            index_values = utils.escaped_split(index)
             (row, isNew) = self.setup_row(index_values,
                                           table,
                                           row_data,
                                           txn,
-                                          reflist,
-                                          None,
-                                          current_row)
+                                          reflist)
             if row is None:
                 continue
 
@@ -487,21 +422,10 @@ class RunConfigUtil():
 
             rows.append(row)
 
-            if kv_type:
-                kv_index_list.append(index)
-
-
             # save this in global reflist
-            if not kv_type:
-                reflist[(table, index)] = (row, isNew)
+            reflist[(table, index)] = (row, isNew)
 
-        if kv_type:
-            kv_rows = {}
-            for index, row in zip(kv_index_list, rows):
-                kv_rows[index] = row
-            return kv_rows
-        else:
-            return rows
+        return rows
 
     def setup_references(self, table, table_data, txn, reflist):
 
@@ -651,6 +575,7 @@ class RunConfigUtil():
         # commit txn
         result = txn.commit_block()
         error = txn.get_error()
+
         return (result, error)
 
 
@@ -714,5 +639,5 @@ def test_read():
     print(json.dumps(config, sort_keys=True, indent=4, separators=(',', ': ')))
 
 if __name__ == "__main__":
-    # test_read()
-    # test_write()
+    #test_read()
+    test_write()
