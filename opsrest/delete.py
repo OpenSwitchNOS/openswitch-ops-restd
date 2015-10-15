@@ -24,6 +24,7 @@ def delete_resource(resource, schema, txn, idl):
     if resource.next is None:
         return None
 
+    # get the last resource pair
     while True:
         if resource.next.next is None:
             break

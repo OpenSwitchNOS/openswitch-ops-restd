@@ -26,35 +26,50 @@ from opsrest.constants import *
 from tornado.log import app_log
 
 
-# get a row from a resource
-def get_row(resource, idl=None):
+def get_row(resource, idl):
+    """
+    using instance of Resource find the corresponding
+    ovs.db.idl.Row instance(s)
 
-    if isinstance(resource, ovs.db.idl.Row):
-        return resource
+    returns an instance of ovs.db.idl.Row or a list of
+    ovs.db.idl.Row instances
 
-    elif isinstance(resource, Resource):
-        if resource.table is None or resource.row is None or idl is None:
-            return None
+    Parameters:
+        resource - opsrest.resource.Resource instance
+        idl - ovs.db.idl.Idl instance
+    """
 
-        else:
+    if not isinstance(resource, Resource):
+        return None
+
+    elif resource.table is None or resource.row is None or idl is None:
+        return None
+    else:
         # resource.row can be a single UUID object or a list of UUID objects
-            rows = resource.row
-            if type(rows) is not types.ListType:
-                return idl.tables[resource.table].rows[resource.row]
-            else:
-                rowlist = []
-                for row in rows:
-                    rowlist.append(idl.tables[resource.table].rows[row])
-                return rowlist
+        rows = resource.row
+        if type(rows) is not types.ListType:
+            return idl.tables[resource.table].rows[resource.row]
+        else:
+            rowlist = []
+            for row in rows:
+                rowlist.append(idl.tables[resource.table].rows[row])
+            return rowlist
 
-    return None
-
-
-# get column items from a row or resource
 def get_column(resource, column=None, idl=None):
+    """
+    from an instance of Resource or a combination of Row/Column
+    return the corresponding column data
 
-    # if resource is a Row object
+    Parameters:
+        resource - opsrest.resource.Resource instance or
+                   ovs.db.idl.Row instance
+        column - column name
+        idl - ovs.db.idl.Idl instance
+    """
+
+    # if resource is an ovs.db.idl.Row instance
     if isinstance(resource, ovs.db.idl.Row):
+        # column name is required
         if column is None:
             return None
 
@@ -68,7 +83,7 @@ def get_column(resource, column=None, idl=None):
         else:
             return None
 
-    # if resource is a Resource object
+    # if resource is an instance of Resource
     if isinstance(resource, Resource):
         if (resource.table is None or resource.row is None or
                 resource.column is None or idl is None):
@@ -88,41 +103,24 @@ def get_column(resource, column=None, idl=None):
 
     return None
 
+def check_resource(resource, idl):
+    """
+    using Resource and Idl instance return a tuple
+    containing the corresponding ovs.db.idl.Row
+    and column name
 
-# returns ovs.db.idl.Row object
-def check_reference(reference, idl=None):
+    Parameters:
+        resource - opsrest.resource.Resource instance
+        idl - ovs.db.idl.Idl instance
+    """
 
-    if isinstance(reference, Resource):
-        if reference.table is None or reference.row is None or idl is None:
-            return None
-        else:
-            ref = get_row(reference, idl)
-            return ref
-
-    elif isinstance(reference, ovs.db.idl.Row):
-        return reference
-
-    return None
-
-
-# returns a tuple of consisting of (ovs.db.idl.Row, column)
-def check_resource(resource, column=None, idl=None):
-
-    if isinstance(resource, Resource):
-        if (resource.table is None or resource.row is None or
-                resource.column is None):  # or idl is None:
-            return None
-        else:
-            return (get_row(resource, idl), resource.column)
-
-    elif isinstance(resource, ovs.db.idl.Row):
-        if column is None:
-            return False
-        else:
-            return (resource, column)
-
-    return None
-
+    if not isinstance(resource, Resource):
+        return None
+    elif (resource.table is None or resource.row is None or
+            resource.column is None):
+        return None
+    else:
+        return (get_row(resource, idl), resource.column)
 
 # add a Row reference that is of type {key:reference}
 def add_kv_reference(key, reference, resource, idl):
@@ -141,13 +139,17 @@ def add_kv_reference(key, reference, resource, idl):
 # add a Row reference
 
 
-def add_reference(reference, resource, column=None, idl=None):
+def add_reference(reference, resource, idl):
+    """
+    Adds a Row reference to a a column entry in the DB
+    Parameters:
+        reference - ovs.db.idl.Row instance
+        resource - opsrest.resource.Resource instance
+                   that corresponds to an entry in DB
+        idl - ovs.db.idl.Idl instance
+    """
 
-    ref = check_reference(reference, idl)
-    if ref is None:
-        return False
-
-    (row, column) = check_resource(resource, column, idl)
+    (row, column) = check_resource(resource, idl)
     if row is None or column is None:
         return False
 

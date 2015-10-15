@@ -18,23 +18,24 @@ from opsrest.verify import *
 
 from tornado.log import app_log
 
-'''
-/system/bridges: POST allowed as we are adding a new Bridge to a child table
-/system/ports: POST allowed as we are adding a new Port to top level table
-/system/vrfs/vrf_default/bgp_routers: POST allowed as we are adding a back
- referenced resource
-/system/bridges/bridge_normal/ports: POST NOT allowed as we are attemtping
- to add a Port as a reference on bridge
-'''
-
-
 def post_resource(data, resource, schema, txn, idl):
+    """
+    /system/bridges: POST allowed as we are adding a new Bridge
+                     to a child table
+    /system/ports: POST allowed as we are adding a new Port to
+                   top level table
+    /system/vrfs/vrf_default/bgp_routers: POST allowed as we
+                   are adding a back referenced resource
+    /system/bridges/bridge_normal/ports: POST NOT allowed as we
+    are attemtping to add a Port as a reference on bridge
+    """
 
     # POST not allowed on System table
     if resource is None or resource.next is None:
         app_log.info("POST is not allowed on System table")
         return None
 
+    # get the last resource pair
     while True:
         if resource.next.next is None:
             break
