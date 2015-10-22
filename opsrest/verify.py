@@ -148,7 +148,7 @@ def verify_put_data(data, resource, schema, idl):
 
     is_root = schema.ovs_tables[resource_verify.table].is_root
 
-    #Reference by is not allowed in put
+    # Reference by is not allowed in put
     if resource.relation == OVSDB_SCHEMA_TOP_LEVEL and not is_root:
         if OVSDB_SCHEMA_REFERENCED_BY in data:
             app_log.info('referenced_by is not allowed when doing PUT')
@@ -372,37 +372,49 @@ def verify_attribute_range(column_name, column_data, request_data):
 
 
 def verify_forward_reference(data, resource, schema, idl):
+    """
+    converts the forward reference URIs to corresponding Row references
+    Parameters:
+        data - post/put data
+        resource - Resource object being accessed
+        schema = restparser schema object
+        idl - ovs.db.idl.Idl object
+    """
     reference_keys = schema.ovs_tables[resource.table].references
     verified_references = {}
 
     for key in reference_keys:
         if reference_keys[key].relation == 'parent':
             continue
-        else:
-            ref_table = reference_keys[key].ref_table
 
         if key in data:
-            index_list = data[key]
+            # this is either a URI or list of URIs
+            _refdata = data[key]
+            notList = False
+            if type(_refdata) is not types.ListType:
+                notList = True
+                _refdata = [_refdata]
 
-            # Check range of references
-            index_len = len(index_list)
-            reference_min = reference_keys[key].n_min
-            reference_max = reference_keys[key].n_max
-            if index_len < reference_min or index_len > reference_max:
-                error_json = to_json_error("Reference list out of range",
-                                           None, key)
-                return {ERROR: error_json}
+            references = []
+            for uri in _refdata:
+                verified_resource = parse.parse_url_path(uri, schema, idl)
+                if verified_resource is None:
+                    error_json = to_json_error("Reference could not be
+                                               identified", None, uri)
+                    return {ERROR: error_json}
 
-            reference_list = []
-            for index in index_list:
-                index_values = index.split('/')
-                row = utils.index_to_row(index_values[-1:],
-                                         schema.ovs_tables[ref_table],
-                                         idl.tables[ref_table])
-                reference_list.append(row)
-            verified_references[key] = reference_list
+                # get the Row instance of the reference we are adding
+                while verified_resource.next is not None:
+                    verified_resource = verified_resource.next
+                row = utils.get_row_from_resource(verified_resource, idl)
+                references.append(row)
+
+            if notList:
+                references = references[0]
+            verified_references[key] = references
 
     return verified_references
+
 
 '''
 subroutine to validate referenced_by uris/attribute JSON
@@ -516,7 +528,8 @@ def get_non_mutable_attributes(resource, schema):
 
 
 def get_config_data(data):
-# all PUT/POST data should be enclosed in { 'configuration' : { DATA } } JSON
+    # all PUT/POST data should be enclosed in
+    # { 'configuration' : { DATA } } JSON
     if OVSDB_SCHEMA_CONFIG not in data:
         app_log.debug("JSON is missing configuration data")
         error_json = to_json_error("Missing %s" % OVSDB_SCHEMA_CONFIG,
