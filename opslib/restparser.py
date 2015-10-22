@@ -183,6 +183,9 @@ class OVSReference(object):
         self.n_max = type_.n_max
         self.n_min = type_.n_min
 
+        # category type of this reference
+        self.category = None
+
 
 class OVSTable(object):
     """__init__() functions as the class constructor"""
@@ -270,10 +273,13 @@ class OVSTable(object):
             # For now, we are using only one tag.
             if relationship == "1:m":
                 table.references[column_name] = OVSReference(type_, "child")
+                table.references[column_name].category = category
             elif relationship == "m:1":
                 table.references[column_name] = OVSReference(type_, "parent")
+                table.references[column_name].category = category
             elif relationship == "reference":
                 table.references[column_name] = OVSReference(type_, "reference")
+                table.references[column_name].category = category
             elif category == "configuration":
                 table.config[column_name] = OVSColumn(table, column_name,
                                                       type_, is_optional,

@@ -30,7 +30,7 @@ def split_path(path):
     return path
 
 
-def parse_url_path(path, schema, idl, http_method):
+def parse_url_path(path, schema, idl, http_method='GET'):
 
     if not path.startswith(REST_VERSION_PATH):
         return None
@@ -172,7 +172,7 @@ def parse(path, resource, schema, idl, http_method):
 
     # we now have a complete new_resource
     # continue processing the path further
-    path = path[1:]
+    path = path[len(index_list):]
     parse(path, new_resource, schema, idl, http_method)
 
 '''

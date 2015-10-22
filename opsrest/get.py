@@ -110,8 +110,15 @@ def get_row_json(row, table, schema, idl, uri, selector):
                                               table,
                                               schema, idl, uri)
 
-    # references are part of configuration
-    config_data.update(reference_data)
+        # depending upon the category of reference
+        # pair them with the right data set
+        category = references[key].category
+        if category == OVSDB_SCHEMA_CONFIG:
+            config_data.update({key:reference_data[key]})
+        elif category == OVSDB_SCHEMA_STATUS:
+            status_data.update({key:reference_data[key]})
+        elif category == OVSDB_SCHEMA_STATS:
+            stats_data.update({key:reference_data[key]})
 
     if selector == OVSDB_SCHEMA_CONFIG:
         data = {OVSDB_SCHEMA_CONFIG: config_data}
@@ -241,10 +248,12 @@ def _create_uri(uri, paths):
     other path.
     Example /system/ports/ -> /system/ports
     '''
-    result_path = uri.rstrip('/')
-    if len(paths) > 1:
-        result_path += "/".join(paths)
-    else:
-        result_path += "/" + paths[0]
+   if not uri.endswith('/'):
+        uri += '/'
 
-    return result_path
+    if len(paths) > 1:
+        uri += "/".join(paths)
+    else:
+        uri += "/" + paths[0]
+
+    return uri
