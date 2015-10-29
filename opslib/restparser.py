@@ -64,8 +64,11 @@ def extractColDesc(column_desc):
 
 class OVSColumn(object):
     """__init__() functions as the class constructor"""
-    def __init__(self, table, col_name, type_, is_optional=True, mutable=True):
+    def __init__(self, table, col_name, type_, category, is_optional=True, mutable=True):
         self.name = col_name
+
+        # category type of this column
+        self.category = category
 
         # is this column entry optional
         self.is_optional = is_optional
@@ -186,9 +189,12 @@ class OVSColumn(object):
 
 class OVSReference(object):
     """__init__() functions as the class constructor"""
-    def __init__(self, type_, relation='reference', mutable=True):
+    def __init__(self, type_, category, relation='reference', mutable=True):
         base_type = type_.key
         self.mutable = mutable
+
+        # category type of this reference
+        self.category = category
 
         # Name of the table being referenced
         self.kv_type = False
@@ -214,6 +220,7 @@ class OVSReference(object):
         self.is_plural = (type_.n_max != 1)
         self.n_max = type_.n_max
         self.n_min = type_.n_min
+
 
 
 class OVSTable(object):
@@ -301,32 +308,38 @@ class OVSTable(object):
             # new form of tagging as a second step.
             # For now, we are using only one tag.
             if relationship == "1:m":
-                table.references[column_name] = OVSReference(type_, "child")
+                table.references[column_name] = OVSReference(type_, "child", category)
             elif relationship == "m:1":
-                table.references[column_name] = OVSReference(type_, "parent")
+                table.references[column_name] = OVSReference(type_, "parent", category)
             elif relationship == "reference":
-                table.references[column_name] = OVSReference(type_, "reference")
+                table.references[column_name] = OVSReference(type_, "reference", category)
             elif category == "configuration":
                 table.config[column_name] = OVSColumn(table, column_name,
-                                                      type_, is_optional,
+                                                      type_, category, is_optional,
                                                       mutable)
             elif category == "status":
                 table.status[column_name] = OVSColumn(table, column_name,
-                                                      type_, is_optional)
+                                                      type_, category, is_optional)
             elif category == "statistics":
                 table.stats[column_name] = OVSColumn(table, column_name,
-                                                     type_, is_optional)
+                                                     type_, category, is_optional)
             # the following code can be removed after schema change
             # switchover
             elif category == "child":
-                table.references[column_name] = OVSReference(type_, category)
+                table.references[column_name] = OVSReference(type_,
+                                                             category,
+                                                             category)
                 table.references[column_name].column = OVSColumn(table,
                                                                  column_name,
-                                                                 type_)
+                                                                 type_,
+                                                                 category)
             elif category == "parent":
-                table.references[column_name] = OVSReference(type_, category)
+                table.references[column_name] = OVSReference(type_,
+                                                             category,
+                                                             category)
             elif category == "reference":
                 table.references[column_name] = OVSReference(type_,
+                                                             category,
                                                              category,
                                                              mutable)
 
