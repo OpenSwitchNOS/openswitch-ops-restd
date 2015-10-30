@@ -255,6 +255,9 @@ class OVSTable(object):
         # table name to OVSReference object mapping
         self.references = {}
 
+        # Dictionary of key as column name category as value
+        self.category = {}
+
     def setIndexes(self, indexes):
         if len(indexes) > 0:
             self.indexes = indexes
@@ -296,6 +299,9 @@ class OVSTable(object):
                     is_optional = True
 
             table.columns.append(column_name)
+
+            table.category[column_name] = category
+
             # An attribute will be able to get marked with relationship
             # and category tags simultaneously. We are utilizing the
             # new form of tagging as a second step.
