@@ -41,6 +41,10 @@ def put_resource(data, resource, schema, txn, idl):
         app_log.debug("Resource to Update = Table: %s "
                       % resource_update.table)
 
+    table = schema.ovs_tables[resource_update.table]
+    if table.is_put_allowed is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
+
     #Needs to be implemented
     verified_data = verify_data(data, resource, schema, idl, 'PUT')
 

@@ -30,6 +30,10 @@ def delete_resource(resource, schema, txn, idl):
             break
         resource = resource.next
 
+    table = schema.ovs_tables[resource.next.table]
+    if table.is_post_delete_allowed is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
+
     if resource.relation == OVSDB_SCHEMA_CHILD:
 
         if resource.next.row is None:

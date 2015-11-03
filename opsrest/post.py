@@ -41,6 +41,10 @@ def post_resource(data, resource, schema, txn, idl):
             break
         resource = resource.next
 
+    table = schema.ovs_tables[resource.next.table]
+    if table.is_post_delete_allowed is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
+
     verified_data = verify_data(data, resource, schema, idl, 'POST')
 
     if verified_data is None:

@@ -262,6 +262,12 @@ class OVSTable(object):
         # table name to OVSReference object mapping
         self.references = {}
 
+        # Flag to restrict invalid post/delete operations on tables
+        self.is_post_delete_allowed = False
+
+        # Flag to restrict invalid put operations on tables
+        self.is_put_allowed = False
+
     def setIndexes(self, indexes):
         if len(indexes) > 0:
             self.indexes = indexes
@@ -286,6 +292,7 @@ class OVSTable(object):
             raise error.Error("table must have at least one column", json)
 
         table = OVSTable(name, is_root, max_rows != 1)
+        col_category = {}
         for column_name, column_json in columns_json.iteritems():
             parser = ovs.db.parser.Parser(column_json, "column %s" % name)
             category = parser.get_optional("category", [str, unicode])
@@ -303,6 +310,11 @@ class OVSTable(object):
                     is_optional = True
 
             table.columns.append(column_name)
+
+            col_category[column_name] = category
+            if category == "configuration":
+                table.is_put_allowed = True
+
             # An attribute will be able to get marked with relationship
             # and category tags simultaneously. We are utilizing the
             # new form of tagging as a second step.
@@ -357,10 +369,13 @@ class OVSTable(object):
                         table.references[index].relation == "parent"):
                     continue
                 tmp_indexes.append(index)
+                if col_category[index] == "configuration":
+                    table.is_post_delete_allowed = True
             if len(tmp_indexes) > 0:
                 indexes_list = tmp_indexes
                 break
-
+        if len(indexes_list) == 0:
+            table.is_post_delete_allowed = table.is_put_allowed
         table.setIndexes(indexes_list)
 
         return table
