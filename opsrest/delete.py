@@ -19,6 +19,27 @@ from opsrest.verify import *
 from tornado.log import app_log
 
 
+def op_permitted(resource, schema):
+    table = schema.ovs_tables[resource.table]
+    if len(table.indexes) > 0:
+        for index in table.indexes:
+            if index in table.references:
+                if table.references[index].category == OVSDB_SCHEMA_CONFIG:
+                    return True
+            elif index in table.config:
+                return True
+
+    else:
+        for col in schema.ovs_tables[resource.table].columns:
+            if (col in table.references and
+                        table.references[col].category == OVSDB_SCHEMA_CONFIG):
+                return True
+            elif col in table.config:
+                return True
+
+    return False
+
+
 def delete_resource(resource, schema, txn, idl):
 
     if resource.next is None:
@@ -29,6 +50,10 @@ def delete_resource(resource, schema, txn, idl):
         if resource.next.next is None:
             break
         resource = resource.next
+
+    ret = op_permitted(resource.next, schema)
+    if ret == False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
 
     if resource.relation == OVSDB_SCHEMA_CHILD:
 

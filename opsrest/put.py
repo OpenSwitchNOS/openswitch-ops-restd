@@ -19,6 +19,18 @@ from opsrest.verify import *
 from tornado.log import app_log
 
 
+def op_permitted(resource, schema):
+    table = schema.ovs_tables[resource.table]
+    for col in table.columns:
+        if (col in table.references and
+                    table.references[col].category == OVSDB_SCHEMA_CONFIG):
+            return True
+        elif col in table.config:
+            return True
+
+    return False
+
+
 def put_resource(data, resource, schema, txn, idl):
 
     # Allow PUT operation on System table
@@ -40,6 +52,11 @@ def put_resource(data, resource, schema, txn, idl):
     if resource_update is not None:
         app_log.debug("Resource to Update = Table: %s "
                       % resource_update.table)
+
+    ret = op_permitted(resource_update, schema)
+
+    if ret == False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
 
     #Needs to be implemented
     verified_data = verify_data(data, resource, schema, idl, 'PUT')
