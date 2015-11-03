@@ -23,6 +23,33 @@ from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
 
 
+def verify_delete(resource, schema):
+    '''
+    Checks for invalid resource deletion:
+    DELETE is allowed on any root table with an index attribute tagged as
+    category:configuration or on any non-root table referenced by an attribute
+    tagged as category:configuration
+    '''
+    tableschema = schema.ovs_tables[resource.next.table]
+    if tableschema.is_root is True:
+        if len(tableschema.indexes) == 1 and tableschema.indexes[0] == 'uuid':
+            return False
+        else:
+            for index in tableschema.indexes:
+                if (index in tableschema.config or
+                        index in tableschema.references and
+                        tableschema.references[index].category ==
+                        OVSDB_SCHEMA_CONFIG):
+                    return True
+    else:
+        tableschema = schema.ovs_tables[resource.table]
+        if (tableschema.references[resource.column].category ==
+                OVSDB_SCHEMA_CONFIG):
+            return True
+
+    return False
+
+
 def verify_data(data, resource, schema, idl, http_method):
 
     if http_method == 'POST':
@@ -299,7 +326,7 @@ def verify_container_values_type(column_name, column_data, request_data):
 
                     if converted_value is None:
                         error_json = \
-                            to_json_error("Value type mismatch for key" + \
+                            to_json_error("Value type mismatch for key"
                                           " '%s'" % key,
                                           None, column_name)
                         break
@@ -310,6 +337,7 @@ def verify_container_values_type(column_name, column_data, request_data):
                 break
 
     return error_json
+
 
 def convert_string_to_value_by_type(value, type_):
 
@@ -330,6 +358,7 @@ def convert_string_to_value_by_type(value, type_):
             converted_value = None
 
     return converted_value
+
 
 def verify_valid_attribute_values(request_data, column_data, column_name):
     valid = True
