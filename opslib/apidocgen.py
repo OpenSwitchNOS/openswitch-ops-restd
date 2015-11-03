@@ -357,6 +357,17 @@ def genDefinition(table_name, col, definitions):
                 desc = ""
             properties[key] = genBaseType(type, min, max, desc)
 
+    if not properties and col.is_dict:
+        # If enums and XML definitions do not exist for the dictionary-based
+        # column, it should still be represented as a dictionary with
+        # "key" as the key and the value's type as the value. The value must
+        # be a datatype otherwise it will not be rendered:
+        # i.e.: "key": "string"
+        properties["key"] = genBaseType(col.value_type,
+                                        col.valueRangeMin,
+                                        col.valueRangeMax,
+                                        "Key-Value pair for " + col.name)
+
     if properties:
         definitions[table_name + "-" + col.name + "-KV"] = {"properties":
                                                             properties}
@@ -390,7 +401,7 @@ def getDefinition(schema, table, definitions):
                 sub["items"] = item
             else:
                 sub["$ref"] = "#/definitions/Resource"
-                sub["description"] = "Referece of " + child_table.name
+                sub["description"] = "Reference of " + child_table.name
             properties[col_name] = sub
 
     definitions[table.name + "Config"] = {"properties": properties}
@@ -405,7 +416,7 @@ def getDefinition(schema, table, definitions):
             subtable_name = col_name
         sub = {}
         sub["$ref"] = "#/definitions/" + subtable_name + "ConfigData"
-        sub["description"] = "Referenced resurce of " + subtable_name + " instances"
+        sub["description"] = "Referenced resource of " + subtable_name + " instances"
         properties[col_name] = sub
 
     # Special treat /system resource
@@ -421,7 +432,7 @@ def getDefinition(schema, table, definitions):
 
             sub = {}
             sub["$ref"] = "#/definitions/" + subtable.name + "ConfigData"
-            sub["description"] = "Referenced resurce of " + subtable.name + " instances"
+            sub["description"] = "Referenced resource of " + subtable.name + " instances"
             properties[subtable_name] = sub
 
     definitions[table.name + "ConfigFull"] = {"properties": properties}
