@@ -18,6 +18,7 @@ from opsrest.verify import *
 
 from tornado.log import app_log
 
+
 def post_resource(data, resource, schema, txn, idl):
     """
     /system/bridges: POST allowed as we are adding a new Bridge

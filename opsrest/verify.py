@@ -23,6 +23,33 @@ from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
 
 
+def verify_delete(resource, schema):
+    '''
+    Checks for invalid resource deletion:
+    DELETE is allowed on any root table with an index attribute tagged as
+    category:configuration or on any non-root table referenced by an attribute
+    tagged as category:configuration
+    '''
+    table = schema.ovs_tables[resource.table]
+    if len(table.indexes) > 0:
+        for index in table.indexes:
+            if (index in table.references and
+                    table.references[index].category == OVSDB_SCHEMA_CONFIG):
+                return True
+            elif index in table.config:
+                return True
+
+    else:
+        for col in schema.ovs_tables[resource.table].columns:
+            if (col in table.references and
+                    table.references[col].category == OVSDB_SCHEMA_CONFIG):
+                return True
+            elif col in table.config:
+                return True
+
+    return False
+
+
 def verify_data(data, resource, schema, idl, http_method):
 
     if http_method == 'POST':
@@ -299,7 +326,7 @@ def verify_container_values_type(column_name, column_data, request_data):
 
                     if converted_value is None:
                         error_json = \
-                            to_json_error("Value type mismatch for key" + \
+                            to_json_error("Value type mismatch for key"
                                           " '%s'" % key,
                                           None, column_name)
                         break
@@ -310,6 +337,7 @@ def verify_container_values_type(column_name, column_data, request_data):
                 break
 
     return error_json
+
 
 def convert_string_to_value_by_type(value, type_):
 
@@ -330,6 +358,7 @@ def convert_string_to_value_by_type(value, type_):
             converted_value = None
 
     return converted_value
+
 
 def verify_valid_attribute_values(request_data, column_data, column_name):
     valid = True
