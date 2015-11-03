@@ -23,6 +23,27 @@ from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
 
 
+def op_permitted(resource, schema):
+    table = schema.ovs_tables[resource.table]
+    if len(table.indexes) > 0:
+        for index in table.indexes:
+            if (index in table.references and
+                table.references[index].category == OVSDB_SCHEMA_CONFIG):
+                return True
+            elif index in table.config:
+                return True
+
+    else:
+        for col in schema.ovs_tables[resource.table].columns:
+            if (col in table.references and
+                table.references[col].category == OVSDB_SCHEMA_CONFIG):
+                return True
+            elif col in table.config:
+                return True
+
+    return False
+
+
 def verify_data(data, resource, schema, idl, http_method):
 
     if http_method == 'POST':
