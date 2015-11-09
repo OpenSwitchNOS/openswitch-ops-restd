@@ -15,12 +15,17 @@
 from opsrest.constants import *
 from opsrest.utils import utils
 from opsrest import verify
+from opsrest.transaction import TransactionResult
 import httplib
 
 from tornado.log import app_log
 
 
-def post_resource(data, resource, schema, txn, idl):
+def post_set_resource_index(txn_res, row, table, schema, idl):
+    index = utils.row_to_index(row, table, schema, idl)
+    txn_res.set(index)
+
+def post_resource(data, resource, schema, txn, txn_res, idl):
     """
     /system/bridges: POST allowed as we are adding a new Bridge
                      to a child table
@@ -56,6 +61,8 @@ def post_resource(data, resource, schema, txn, idl):
         return verified_data
 
     app_log.debug("adding new resource to " + resource.next.table + " table")
+
+    new_row = ""
     if resource.relation == OVSDB_SCHEMA_CHILD:
         # create new row, populate it with data
         # add it as a reference to the parent resource
@@ -79,10 +86,10 @@ def post_resource(data, resource, schema, txn, idl):
     elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
         new_row = utils.setup_new_row(resource.next, verified_data,
                                       schema, txn, idl)
-
         # a non-root table entry MUST be referenced elsewhere
         if OVSDB_SCHEMA_REFERENCED_BY in verified_data:
             for reference in verified_data[OVSDB_SCHEMA_REFERENCED_BY]:
                 utils.add_reference(new_row, reference, idl)
-
+    post_set_resource_index(txn_res, new_row, resource.next.table,
+                            schema, idl)
     return txn.commit()

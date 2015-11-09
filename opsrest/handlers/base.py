@@ -25,6 +25,7 @@ from opsrest.parse import parse_url_path
 from opsrest.constants import *
 from opsrest.utils.utils import *
 from opsrest import get, post, delete, put
+from opsrest.transaction import TransactionResult
 
 import userauth
 from opsrest.settings import settings
@@ -170,10 +171,13 @@ class AutoHandler(BaseHandler):
                 # create a new ovsdb transaction
                 self.txn = self.ref_object.manager.get_new_transaction()
 
+                # create a new txn result
+                self.txn_res = TransactionResult()
+
                 # post_resource performs data verficiation, prepares and
                 # commits the ovsdb transaction
                 result = post.post_resource(post_data, self.resource_path,
-                                            self.schema, self.txn,
+                                            self.schema, self.txn, self.txn_res,
                                             self.idl)
 
                 if result == INCOMPLETE:
@@ -186,6 +190,9 @@ class AutoHandler(BaseHandler):
                 app_log.debug("POST operation result: %s", result)
                 if self.successful_transaction(result):
                     self.set_status(httplib.CREATED)
+                    item_index = self.txn_res.get()
+                    new_uri = self.request.path + "/" + item_index
+                    self.set_header("Location", new_uri)
 
             except ValueError, e:
                 self.set_status(httplib.BAD_REQUEST)
