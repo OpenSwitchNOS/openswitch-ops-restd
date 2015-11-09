@@ -30,6 +30,7 @@ class OvsdbTransaction:
         self.status = None
         self.txn = ovs.db.idl.Transaction(idl)
         self.event = Event()
+        self.index = None
 
     def commit(self):
         self.status = self.txn.commit()

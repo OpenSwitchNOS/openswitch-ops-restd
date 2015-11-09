@@ -186,6 +186,8 @@ class AutoHandler(BaseHandler):
                 app_log.debug("POST operation result: %s", result)
                 if self.successful_transaction(result):
                     self.set_status(httplib.CREATED)
+                    new = self.request.path + "/" + self.txn.index
+                    self.set_header("Location", new)
 
             except ValueError, e:
                 self.set_status(httplib.BAD_REQUEST)

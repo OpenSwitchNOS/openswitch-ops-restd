@@ -18,6 +18,10 @@ from opsrest.verify import *
 
 from tornado.log import app_log
 
+def post_set_resource_index(txn, table, row):
+    index = utils.row_to_index(table, row)
+    txn.index = index
+
 def post_resource(data, resource, schema, txn, idl):
     """
     /system/bridges: POST allowed as we are adding a new Bridge
@@ -51,6 +55,7 @@ def post_resource(data, resource, schema, txn, idl):
         return verified_data
 
     app_log.debug("adding new resource to " + resource.next.table + " table")
+
     if resource.relation == OVSDB_SCHEMA_CHILD:
         # create new row, populate it with data
         # add it as a reference to the parent resource
@@ -64,20 +69,20 @@ def post_resource(data, resource, schema, txn, idl):
                                    new_row, resource, idl)
         else:
             utils.add_reference(new_row, resource, idl)
+        post_set_resource_index(txn, schema.ovs_tables[resource.next.table], new_row)
 
     elif resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
         # row for a back referenced item contains the parent's reference
         #in the verified data
         new_row = utils.setup_new_row(resource.next, verified_data,
                                       schema, txn, idl)
-
+        post_set_resource_index(txn, schema.ovs_tables[resource.next.table], new_row)
     elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
         new_row = utils.setup_new_row(resource.next, verified_data,
                                       schema, txn, idl)
-
+        post_set_resource_index(txn, schema.ovs_tables[resource.next.table], new_row)
         # a non-root table entry MUST be referenced elsewhere
         if OVSDB_SCHEMA_REFERENCED_BY in verified_data:
             for reference in verified_data[OVSDB_SCHEMA_REFERENCED_BY]:
                 utils.add_reference(new_row, reference, idl)
-
     return txn.commit()
