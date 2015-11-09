@@ -45,3 +45,8 @@ class OvsdbTransaction:
     def get_db_error_msg(self):
         db_dict = json.loads(self.txn.get_error())
         return db_dict['details']
+
+class TransactionResult(object):
+    def __init__(self, result, index=None):
+        self.result = result
+        self.index = index

@@ -15,6 +15,7 @@
 from opsrest.constants import *
 from opsrest.utils import utils
 from opsrest import verify
+from opsrest.transaction import TransactionResult
 import httplib
 
 from tornado.log import app_log
@@ -94,4 +95,5 @@ def put_resource(data, resource, schema, txn, idl):
                                        schema, txn, idl)
 
     # TODO we need to query the modified object and return it
-    return txn.commit()
+    result = txn.commit()
+    return TransactionResult(result)
