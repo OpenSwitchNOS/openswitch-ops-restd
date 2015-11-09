@@ -15,6 +15,7 @@
 from opsrest.constants import *
 from opsrest.utils import utils
 from opsrest import verify
+from opsrest.transaction import TransactionResult
 import httplib
 from tornado.log import app_log
 
@@ -49,4 +50,5 @@ def delete_resource(resource, schema, txn, idl):
     elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
         utils.delete_all_references(resource.next, schema, idl)
 
-    return txn.commit()
+    result = txn.commit()
+    return TransactionResult(result)

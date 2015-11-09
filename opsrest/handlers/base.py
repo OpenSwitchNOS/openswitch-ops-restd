@@ -27,6 +27,7 @@ from opsrest.constants import *
 from opsrest.utils.utils import *
 
 from opsrest import get, post, delete, put
+from opsrest.transaction import TransactionResult
 
 import userauth
 from opsrest.settings import settings
@@ -174,20 +175,21 @@ class AutoHandler(BaseHandler):
 
                 # post_resource performs data verficiation, prepares and
                 # commits the ovsdb transaction
-                result = post.post_resource(post_data, self.resource_path,
-                                            self.schema, self.txn,
-                                            self.idl)
+                txn_res = post.post_resource(post_data, self.resource_path,
+                                             self.schema, self.txn, self.idl)
 
-                if result == INCOMPLETE:
+                if txn_res.result == INCOMPLETE:
                     self.ref_object.manager.monitor_transaction(self.txn)
                     # on 'incomplete' state we wait until the transaction
                     # completes with either success or failure
                     yield self.txn.event.wait()
-                    result = self.txn.status
+                    txn_res.result = self.txn.status
 
-                app_log.debug("POST operation result: %s", result)
-                if self.successful_transaction(result):
+                app_log.debug("POST operation result: %s", txn_res.result)
+                if self.successful_transaction(txn_res.result):
                     self.set_status(httplib.CREATED)
+                    new_uri = self.request.path + "/" + txn_res.item_index
+                    self.set_header("Location", new_uri)
 
             except ValueError, e:
                 self.set_status(httplib.BAD_REQUEST)
@@ -263,18 +265,18 @@ class AutoHandler(BaseHandler):
 
                   # put_resource performs data verfication, prepares and
                   # commits the ovsdb transaction
-                  result = put.put_resource(update_data, self.resource_path,
+                  txn_res = put.put_resource(update_data, self.resource_path,
                                             self.schema, self.txn, self.idl)
 
-                  if result == INCOMPLETE:
+                  if txn_res.result == INCOMPLETE:
                       self.ref_object.manager.monitor_transaction(self.txn)
                       # on 'incomplete' state we wait until the transaction
                       # completes with either success or failure
                       yield self.txn.event.wait()
-                      result = self.txn.status
+                      txn_res.result = self.txn.status
 
-                  app_log.debug("PUT operation result: %s", result)
-                  if self.successful_transaction(result):
+                  app_log.debug("PUT operation result: %s", txn_res.result)
+                  if self.successful_transaction(txn_res.result):
                       self.set_status(httplib.OK)
 
             except ValueError, e:
@@ -303,21 +305,20 @@ class AutoHandler(BaseHandler):
             if proceed:
                 self.txn = self.ref_object.manager.get_new_transaction()
 
-                result = delete.delete_resource(self.resource_path, self.schema,
+                txn_res = delete.delete_resource(self.resource_path, self.schema,
                                                 self.txn, self.idl)
 
-                if result == INCOMPLETE:
+                if txn_res.result == INCOMPLETE:
                     self.ref_object.manager.monitor_transaction(self.txn)
                     # on 'incomplete' state we wait until the transaction
                     # completes with either success or failure
                     yield self.txn.event.wait()
-                    result = self.txn.status
+                    txn_res.result = self.txn.status
 
-                app_log.debug("DELETE operation result: %s", result)
-                if self.successful_transaction(result):
+                app_log.debug("DELETE operation result: %s", txn_res.result)
+                if self.successful_transaction(txn_res.result):
                     app_log.debug("Successful transaction!")
                     self.set_status(httplib.NO_CONTENT)
-
         except Exception, e:
             if isinstance(e.message, dict):
                 self.set_status(e.message.get('status',
