@@ -55,6 +55,7 @@ def get_row_from_resource(resource, idl):
                 rowlist.append(idl.tables[resource.table].rows[row])
             return rowlist
 
+
 def get_column_data_from_resource(resource, idl):
     """
     return column data
@@ -233,20 +234,20 @@ def delete_all_references(resource, schema, idl):
         idl = ovs.db.idl.Idl instance
     """
     row = get_row_from_resource(resource, idl)
-    #We get the tables that reference the row to delete table
+    # We get the tables that reference the row to delete table
     tables_reference = schema.references_table_map[resource.table]
-    #Get the table name and column list we is referenced
+    # Get the table name and column list we is referenced
     for table_name, columns_list in tables_reference.iteritems():
         app_log.debug("Table %s" % table_name)
         app_log.debug("Column list %s" % columns_list)
-        #Iterate each row to see wich tuple has the reference
+        # Iterate each row to see wich tuple has the reference
         for uuid, row_ref in idl.tables[table_name].rows.iteritems():
-            #Iterate over each reference column and check if has the reference
+            # Iterate over each reference column and check if has the reference
             for column_name in columns_list:
-                #get the referenced values
+                # get the referenced values
                 reflist = get_column_data_from_row(row_ref, column_name)
                 if reflist is not None:
-                    #delete the reference on that row and column
+                    # delete the reference on that row and column
                     delete_row_reference(reflist, row, row_ref, column_name)
 
 
@@ -279,19 +280,19 @@ def setup_new_row(resource, data, schema, txn, idl):
     return row
 
 
-#Update columns from a row
+# Update columns from a row
 def update_row(resource, data, schema, txn, idl):
-    #Verify if is a Resource instance
+    # Verify if is a Resource instance
     if not isinstance(resource, Resource):
         return None
 
     if resource.table is None:
         return None
 
-    #get the row that will be modified
+    # get the row that will be modified
     row = get_row_from_resource(resource, idl)
 
-    #Update config items
+    # Update config items
     config_keys = schema.ovs_tables[resource.table].config
     set_config_fields(row, data, config_keys)
 
@@ -378,7 +379,7 @@ def get_empty_by_basic_type(data):
         return 0
 
     elif type_ in ovs_types.RealType.python_types or \
-    type_ is ovs_types.RealType:
+            type_ is ovs_types.RealType:
         return 0.0
 
     elif type_ is types.BooleanType or \
@@ -529,8 +530,8 @@ def kv_index_to_row(index_values, parent, idl):
     """
     This subroutine fetches the row reference using the index as key.
     Current feature uses a single index and not a combination of multiple
-    indices. This is used for the new key/uuid type forward references introduced
-    for BGP
+    indices. This is used for the new key/uuid type forward references
+    introduced for BGP
     """
     index = index_values[0]
     column = parent.column
@@ -544,34 +545,60 @@ def kv_index_to_row(index_values, parent, idl):
     return None
 
 
-def row_to_index(table_schema, row, uuid_sequencer=None):
+def row_to_index(row, table, restschema, idl, parent_row=None):
+    """
+    Get the index of the resource.
+    Parameters:
+        row - Row instance identifying a resource in the table
+        table - table name
+        restschema - parsed ovsdb schema object from restparser
+        idl - ovs.db.idl.Idl instance
+        parent_row - Row instance of the parent containing 'row'
+                     as a reference. Useful for KV type references
+    """
+    index = None
+    schema = restschema.ovs_tables[table]
+    indexes = schema.indexes
 
-    tmp = []
-    for index in table_schema.indexes:
-        if index == 'uuid':
-            if uuid_sequencer is None:
-                return str(row.uuid)
+    # if index is just UUID
+    if len(indexes) == 1 and indexes[0] == 'uuid':
 
-            # Generate dummy index for all entries in tables that
-            #don't have anything besides UUID
-            if (table_schema.name, str(row.uuid)) not in uuid_sequencer:
+        if schema.parent is not None:
+            parent = schema.parent
+            parent_schema = restschema.ovs_tables[parent]
 
-                if (table_schema.name, 'last_sequence') not in uuid_sequencer:
-                    uuid_sequencer[(table_schema.name, 'last_sequence')] = 0
+            # check in parent if a child 'column' exists
+            column_name = schema.plural_name
+            if column_name in parent_schema.references:
+                # look in all resources
+                parent_rows = None
+                if parent_row is not None:
+                    # TODO: check if this row exists in parent table
+                    parent_rows = [parent_row]
+                else:
+                    parent_rows = idl.tables[parent].rows
 
-                next_sequence = uuid_sequencer[(table_schema.name,
-                                                'last_sequence')] + 1
-                uuid_sequencer[(table_schema.name, 'last_sequence')] = \
-                    next_sequence
-                uuid_sequencer[(table_schema.name, str(row.uuid))] = \
-                    table_schema.name + str(next_sequence)
+                for item in parent_rows.itervalues():
+                    column_data = item.__getattr__(column_name)
 
-            return uuid_sequencer[(table_schema.name, str(row.uuid))]
+                    # this is a dictionary of kv type references
+                    for key, value in column_data.iteritems():
+                        if value == row:
+                            # found the index
+                            index = key
+                            break
+
+                    if index is not None:
+                        break
         else:
-            val = str(row.__getattr__(index))
-            tmp.append(str(val.replace('/', '\/')))
+            index = str(row.uuid)
+    else:
+        tmp = []
+        for item in indexes:
+            tmp.append(urllib.quote(str(row.__getattr__(item))))
+        index = '/'.join(tmp)
 
-    return '/'.join(tmp)
+    return index
 
 
 def escaped_split(s_in):
@@ -588,7 +615,7 @@ def escaped_split(s_in):
 def get_reference_parent_uri(table_name, row, schema, idl):
     uri = ''
     path = get_parent_trace(table_name, row, schema, idl)
-    #Don't include Open_vSwitch table
+    # Don't include Open_vSwitch table
     for table_name, indexes in path[1:]:
         plural_name = schema.ovs_tables[table_name].plural_name
         uri += str(plural_name) + '/' + "/".join(indexes) + '/'
