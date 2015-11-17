@@ -23,6 +23,61 @@ from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
 
 
+def verify_http_method(resource, schema, http_method):
+    '''
+    Operations are allowed on each schema table/resource:
+     - GET: any table with at least one attribute tagged as
+       category:[configuration|status|statistics] can be retrieved.
+     - PUT: any table with at least one attribute tagged as
+       category:configuration (relationship or not) can be updated.
+     - POST/DELETE: any root table with an index attribute tagged as
+       category:configuration OR any non-root table referenced by an attribute
+       tagged as category:configuration can be created/deleted.
+    '''
+    parent_schema = schema.ovs_tables[resource.table]
+    resource_schema = schema.ovs_tables[resource.next.table]
+    is_root = resource_schema.is_root
+    resource_indexes = resource_schema.indexes
+    resource_config = resource_schema.config
+    resource_refs = resource_schema.references
+    parent_refs = parent_schema.references
+
+    # look for config references
+    resource_config_refs = []
+    for name, ref in resource_refs.iteritems():
+        if ref.category == OVSDB_SCHEMA_CONFIG:
+            resource_config_refs.append(name)
+
+    parent_config_refs = []
+    for name, ref in parent_refs.iteritems():
+        if ref.category == OVSDB_SCHEMA_CONFIG:
+            parent_config_refs.append(name)
+
+    if http_method == 'GET':
+        return True
+
+    elif http_method == 'PUT':
+        if len(resource_config) > 0 or len(resource_config_refs) > 0:
+            return True
+        else:
+            return False
+
+    elif http_method == 'POST' or http_method == 'DELETE':
+        if is_root:
+            for index in resource_indexes:
+                if (index in resource_config or
+                        index in resource_config_refs):
+                    return True
+        else:
+            if resource.column is not None:
+                if resource.column in parent_config_refs:
+                    return True
+            elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
+                return True
+
+        return False
+
+
 def verify_data(data, resource, schema, idl, http_method):
 
     if http_method == 'POST':
@@ -299,7 +354,7 @@ def verify_container_values_type(column_name, column_data, request_data):
 
                     if converted_value is None:
                         error_json = \
-                            to_json_error("Value type mismatch for key" + \
+                            to_json_error("Value type mismatch for key"
                                           " '%s'" % key,
                                           None, column_name)
                         break
@@ -310,6 +365,7 @@ def verify_container_values_type(column_name, column_data, request_data):
                 break
 
     return error_json
+
 
 def convert_string_to_value_by_type(value, type_):
 
@@ -330,6 +386,7 @@ def convert_string_to_value_by_type(value, type_):
             converted_value = None
 
     return converted_value
+
 
 def verify_valid_attribute_values(request_data, column_data, column_name):
     valid = True
