@@ -18,6 +18,7 @@ from opsrest.verify import *
 
 from tornado.log import app_log
 
+
 def post_resource(data, resource, schema, txn, idl):
     """
     /system/bridges: POST allowed as we are adding a new Bridge
@@ -40,6 +41,10 @@ def post_resource(data, resource, schema, txn, idl):
         if resource.next.next is None:
             break
         resource = resource.next
+
+    # Check for invalid resource deletion
+    if verify_http_method(resource, schema, "POST") is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
 
     verified_data = verify_data(data, resource, schema, idl, 'POST')
 

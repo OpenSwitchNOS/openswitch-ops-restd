@@ -41,6 +41,9 @@ def put_resource(data, resource, schema, txn, idl):
         app_log.debug("Resource to Update = Table: %s "
                       % resource_update.table)
 
+    if verify_http_method(resource_update, schema, "PUT") is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
+
     #Needs to be implemented
     verified_data = verify_data(data, resource, schema, idl, 'PUT')
 

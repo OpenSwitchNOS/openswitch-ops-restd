@@ -17,7 +17,7 @@ from opsrest.constants import *
 from opsrest.utils import utils
 from ovs.db import types as ovs_types
 from verify import convert_string_to_value_by_type
-
+from opsrest.verify import *
 import types
 import json
 import urllib
@@ -49,6 +49,9 @@ def get_resource(idl, resource, schema, uri=None,
         if resource.next.next is None:
             break
         resource = resource.next
+
+    if verify_http_method(resource, schema, "GET") is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
 
     return get_resource_from_db(resource, schema, idl, uri,
                                 selector, query_arguments, depth)
@@ -652,8 +655,9 @@ def categorize_get_data(schema, table, data, selector=None):
 def _get_referenced_table(schema, resource):
 
     current_table = schema.ovs_tables[resource.table]
-    table = current_table.references[resource.column].ref_table
-    return table
+    if resource.column is not None:
+        table = current_table.references[resource.column].ref_table
+        return table
 
 
 def _get_depth_param(query_arguments):
