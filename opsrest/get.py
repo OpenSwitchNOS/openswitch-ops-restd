@@ -17,7 +17,8 @@ from opsrest.constants import *
 from opsrest.utils import utils
 from ovs.db import types as ovs_types
 from verify import convert_string_to_value_by_type
-
+from opsrest import verify
+import httplib
 import types
 import json
 import urllib
@@ -49,6 +50,9 @@ def get_resource(idl, resource, schema, uri=None,
         if resource.next.next is None:
             break
         resource = resource.next
+
+    if verify.verify_http_method(resource, schema, "GET") is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
 
     return get_resource_from_db(resource, schema, idl, uri,
                                 selector, query_arguments, depth)
