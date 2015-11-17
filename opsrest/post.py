@@ -14,9 +14,11 @@
 
 from opsrest.constants import *
 from opsrest.utils import utils
-from opsrest.verify import *
+from opsrest import verify
+import httplib
 
 from tornado.log import app_log
+
 
 def post_resource(data, resource, schema, txn, idl):
     """
@@ -40,6 +42,9 @@ def post_resource(data, resource, schema, txn, idl):
         if resource.next.next is None:
             break
         resource = resource.next
+
+    if verify.verify_http_method(resource, schema, "POST") is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
 
     verified_data = verify_data(data, resource, schema, idl, 'POST')
 

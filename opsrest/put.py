@@ -14,7 +14,8 @@
 
 from opsrest.constants import *
 from opsrest.utils import utils
-from opsrest.verify import *
+from opsrest import verify
+import httplib
 
 from tornado.log import app_log
 
@@ -40,6 +41,9 @@ def put_resource(data, resource, schema, txn, idl):
     if resource_update is not None:
         app_log.debug("Resource to Update = Table: %s "
                       % resource_update.table)
+
+    if verify.verify_http_method(resource_update, schema, "PUT") is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
 
     #Needs to be implemented
     verified_data = verify_data(data, resource, schema, idl, 'PUT')
