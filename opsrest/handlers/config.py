@@ -22,35 +22,19 @@ import httplib
 import re
 
 import userauth
-from runconfig import runconfig, startupconfig
+from runconfig import runconfig, startupconfig, readconfig
 
 from opsrest.resource import Resource
 from opsrest.parse import parse_url_path
 from opsrest.constants import *
 from opsrest.utils.utils import *
 from opsrest import get, post, delete, put
+from opsrest.handlers.base import BaseHandler
 
 from tornado.log import app_log
 
 
-class ConfigHandler(web.RequestHandler):
-
-    # pass the application reference to the handlers
-    def initialize(self, ref_object):
-        self.ref_object = ref_object
-        self.schema = self.ref_object.restschema
-        self.idl = self.ref_object.manager.idl
-        self.request.path = re.sub("/{2,}", "/", self.request.path)
-
-        # CORS
-        allow_origin = self.request.protocol + "://"
-        # removing port if present
-        allow_origin += self.request.host.split(":")[0]
-        self.set_header("Access-Control-Allow-Origin", allow_origin)
-        self.set_header("Access-Control-Expose-Headers", "Date")
-
-        # TODO - remove next line before release - needed for testing
-        self.set_header("Access-Control-Allow-Origin", "*")
+class ConfigHandler(BaseHandler):
 
     def prepare(self):
         self.request_type = self.get_argument('type', 'running')
@@ -85,7 +69,12 @@ class ConfigHandler(web.RequestHandler):
 
     def _get_config(self):
         waiter = Future()
-        waiter.set_result((self.config_util.get_config(), True))
+        if self.request_type == 'running':
+            waiter.set_result((readconfig.read_config(
+                self.schema, self.idl), True))
+        else:
+            waiter.set_result((self.config_util.get_config(), True))
+
         return waiter
 
     @gen.coroutine
