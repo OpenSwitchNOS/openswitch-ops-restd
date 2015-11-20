@@ -69,7 +69,8 @@ def extractColDesc(column_desc):
 
 class OVSColumn(object):
     """__init__() functions as the class constructor"""
-    def __init__(self, table, col_name, type_, is_optional=True, mutable=True, category=None):
+    def __init__(self, table, col_name, type_,
+                 is_optional=True, mutable=True, category=None):
         self.name = col_name
 
         # category type of this column
@@ -103,58 +104,64 @@ class OVSColumn(object):
         self.kvs = {}
         self.desc = self.parse_xml_desc(table.name, col_name, self.kvs)
 
+    def parse_xml_rec(self, node, xmlColumn, kvs):
+        columnDesc = " "
+        for column in node.getchildren():
+            if column.tag == 'group':
+                columnDesc = self.parse_xml_rec(column, xmlColumn, kvs)
+
+            if (column.tag != 'column' or
+                    xmlColumn != column.attrib['name']):
+                continue
+
+            if('keyname' in column.attrib):
+                self.keyname = column.attrib['keyname']
+
+            if ('key' not in column.attrib):
+                columnDesc = ET.tostring(column, encoding='utf8',
+                                         method='html')
+                continue
+
+                # When an attribute is of type string in schema file,
+                # it may have detailed structure information in its
+                # companion XML description, otherwise the parent
+                # column's type is assumed.
+            kvs[column.attrib['key']] = {}
+            if ('type' in column.attrib):
+                typeData = json.loads(column.attrib['type'])
+                base_type = types.BaseType.from_json(typeData)
+                type_, min_, max_ = self.process_type(base_type)
+                enum = base_type.enum
+            else:
+                type_ = self.value_type
+                min_ = self.valueRangeMin
+                max_ = self.valueRangeMax
+                enum = None
+
+            kvs[column.attrib['key']]['type'] = type_
+            kvs[column.attrib['key']]['rangeMin'] = min_
+            kvs[column.attrib['key']]['rangeMax'] = max_
+            kvs[column.attrib['key']]['enum'] = enum
+                # Since there's no indication of optional in the XML schema,
+                # it inherits its column's. Setting this so that eventually
+                # it can be filled from info in the XML schema
+            kvs[column.attrib['key']]['is_optional'] = self.is_optional
+
+            key_desc = ET.tostring(column, encoding='utf8',
+                                   method='html')
+            kvs[column.attrib['key']]['desc'] = extractColDesc(key_desc)
+
+        return columnDesc
+
     # Read the description for each column from XML source
     def parse_xml_desc(self, xmlTable, xmlColumn, kvs):
+
         columnDesc = ""
         for node in xml_tree.iter():
             if node.tag != 'table' or xmlTable != node.attrib['name']:
                 continue
-
-            for group in node.getchildren():
-                for column in group.getchildren():
-                    if (column.tag != 'column' or
-                            xmlColumn != column.attrib['name']):
-                        continue
-
-                    if('keyname' in column.attrib):
-                        self.keyname = column.attrib['keyname']
-
-                    if ('key' not in column.attrib):
-                        columnDesc = ET.tostring(column, encoding='utf8',
-                                                 method='html')
-                        continue
-
-                    # When an attribute is of type string in schema file,
-                    # it may have detailed structure information in its
-                    # companion XML description, otherwise the parent
-                    # column's type is assumed.
-                    kvs[column.attrib['key']] = {}
-                    if ('type' in column.attrib):
-                        typeData = json.loads(column.attrib['type'])
-                        base_type = types.BaseType.from_json(typeData)
-                        type_, min_, max_ = self.process_type(base_type)
-                        enum = base_type.enum
-                    else:
-                        type_ = self.value_type
-                        min_ = self.valueRangeMin
-                        max_ = self.valueRangeMax
-                        enum = None
-
-                    kvs[column.attrib['key']]['type'] = type_
-                    kvs[column.attrib['key']]['rangeMin'] = min_
-                    kvs[column.attrib['key']]['rangeMax'] = max_
-                    kvs[column.attrib['key']]['enum'] = enum
-                    # Since there's no indication of optional in the XML schema,
-                    # it inherits its column's. Setting this so that eventually
-                    # it can be filled from info in the XML schema
-                    kvs[column.attrib['key']]['is_optional'] = self.is_optional
-
-                    key_desc = ET.tostring(column, encoding='utf8',
-                                           method='html')
-                    kvs[column.attrib['key']]['desc'] = extractColDesc(key_desc)
-            break
-
-        return extractColDesc(columnDesc)
+            self.parse_xml_rec(node, xmlColumn, kvs)
+            return extractColDesc(columnDesc)
 
     def process_type(self, base):
         type = base.type
@@ -194,7 +201,8 @@ class OVSColumn(object):
 
 class OVSReference(object):
     """__init__() functions as the class constructor"""
-    def __init__(self, type_, relation='reference', mutable=True, category=None):
+    def __init__(self, type_, relation='reference',
+                 mutable=True, category=None):
         base_type = type_.key
         self.mutable = mutable
 
@@ -314,7 +322,10 @@ class OVSTable(object):
             # new form of tagging as a second step.
             # For now, we are using only one tag.
             if relationship == "1:m":
-                table.references[column_name] = OVSReference(type_, "child", True, category)
+                table.references[column_name] = OVSReference(type_,
+                                                             "child",
+                                                             True,
+                                                             category)
                 table.references[column_name].column = OVSColumn(table,
                                                                  column_name,
                                                                  type_,
@@ -322,9 +333,15 @@ class OVSTable(object):
                                                                  True,
                                                                  category)
             elif relationship == "m:1":
-                table.references[column_name] = OVSReference(type_, "parent", True, category)
+                table.references[column_name] = OVSReference(type_,
+                                                             "parent",
+                                                             True,
+                                                             category)
             elif relationship == "reference":
-                table.references[column_name] = OVSReference(type_, "reference", True, category)
+                table.references[column_name] = OVSReference(type_,
+                                                             "reference",
+                                                             True,
+                                                             category)
             elif category == "configuration":
                 table.config[column_name] = OVSColumn(table, column_name,
                                                       type_, is_optional,
