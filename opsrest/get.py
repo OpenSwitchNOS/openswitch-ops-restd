@@ -131,13 +131,6 @@ def get_resource_from_db(resource, schema, idl, uri=None,
                                            resource.next.table, schema, idl,
                                            uri, selector, depth)
 
-    elif resource.relation is OVSDB_SCHEMA_REFERENCE:
-        uri = _get_uri(resource, schema, uri)
-        table = _get_referenced_table(schema, resource)
-        resource_result = get_column_json(resource.column, resource.row,
-                                          resource.table, schema, idl, uri,
-                                          selector, depth)
-
     elif resource.relation is OVSDB_SCHEMA_BACK_REFERENCE:
         if isinstance(resource.next.row, types.ListType):
             table = _get_referenced_table(schema, resource)
@@ -255,10 +248,9 @@ def get_column_json(column, row, table, schema, idl, uri,
     # case 1: reference is of dict type with index/uuid pairs
     if current_table.references[column].kv_type:
         # we already have the keys
-        _uri = uri + '/' + column
         if not depth:
             for key in db_col.keys():
-                resources_list.append(_uri + '/' + str(key))
+                resources_list.append(uri + '/' + str(key))
         else:
             for key in db_col.keys():
                 json_row = get_row_json(str(key), col_table, schema, idl, uri,
@@ -345,10 +337,6 @@ def _get_uri(resource, schema, uri=None):
     '''
     if resource.relation is OVSDB_SCHEMA_TOP_LEVEL:
         if resource.next.row is None:
-            uri = _get_base_uri() + \
-                schema.ovs_tables[resource.next.table].plural_name
-
-    elif resource.relation is OVSDB_SCHEMA_REFERENCE:
             uri = _get_base_uri() + \
                 schema.ovs_tables[resource.next.table].plural_name
 
