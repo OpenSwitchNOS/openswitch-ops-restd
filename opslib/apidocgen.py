@@ -414,6 +414,20 @@ def genBaseType(type, min, max, desc):
     return item
 
 
+# Generate definitions including "properties" and "required" for all columns.
+# Tuples of "properties" dictionary and "required" array are returned.
+def genAllColDefinition(cols, table_name, definitions):
+    properties = {}
+    required = []
+    for colName, col in cols:
+        properties[colName] = genDefinition(table_name, col, definitions)
+
+        if not col.is_optional:
+            required.append(col.name)
+
+    return properties, required
+
+
 # Generate definition for a column in a table
 def genDefinition(table_name, col, definitions):
     properties = {}
@@ -470,9 +484,9 @@ def genDefinition(table_name, col, definitions):
 
 
 def getDefinition(schema, table, definitions):
-    properties = {}
-    for colName, col in table.config.iteritems():
-        properties[colName] = genDefinition(table.name, col, definitions)
+    properties, required = genAllColDefinition(table.config.iteritems(),
+                                               table.name, definitions)
+
     # references are included in configuration as well
     for col_name in table.references:
         if table.references[col_name].relation == "reference":
@@ -492,7 +506,8 @@ def getDefinition(schema, table, definitions):
                 sub["description"] = "Reference of " + child_table.name
             properties[col_name] = sub
 
-    definitions[table.name + "Config"] = {"properties": properties}
+    definitions[table.name + "Config"] = {"properties": properties,
+                                          "required": required}
 
     # Construct full configuration definition to include subresources
     for col_name in table.children:
@@ -523,7 +538,8 @@ def getDefinition(schema, table, definitions):
             sub["description"] = "Referenced resource of " + subtable.name + " instances"
             properties[subtable_name] = sub
 
-    definitions[table.name + "ConfigFull"] = {"properties": properties}
+    definitions[table.name + "ConfigFull"] = {"properties": properties,
+                                              "required": required}
 
     properties = {}
     definition = {}
@@ -552,15 +568,15 @@ def getDefinition(schema, table, definitions):
 
     definitions[table.name + "ConfigData"] = {"properties": properties}
 
-    properties = {}
-    for colName, col in table.status.iteritems():
-        properties[colName] = genDefinition(table.name, col, definitions)
-    definitions[table.name + "Status"] = {"properties": properties}
+    properties, required = genAllColDefinition(table.status.iteritems(),
+                                               table.name, definitions)
+    definitions[table.name + "Status"] = {"properties": properties,
+                                          "required": required}
 
-    properties = {}
-    for colName, col in table.stats.iteritems():
-        properties[colName] = genDefinition(table.name, col, definitions)
-    definitions[table.name + "Stats"] = {"properties": properties}
+    properties, required = genAllColDefinition(table.stats.iteritems(),
+                                               table.name, definitions)
+    definitions[table.name + "Stats"] = {"properties": properties,
+                                         "required": required}
 
     properties = {}
     sub = {}
