@@ -85,7 +85,7 @@ class ConfigHandler(web.RequestHandler):
 
     def _get_config(self):
         waiter = Future()
-        waiter.set_result((self.config_util.get_config(), True))
+        waiter.set_result((self.config_util.get_running_config(), True))
         return waiter
 
     @gen.coroutine
