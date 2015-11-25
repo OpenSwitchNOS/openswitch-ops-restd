@@ -55,7 +55,6 @@ def get_row_from_resource(resource, idl):
                 rowlist.append(idl.tables[resource.table].rows[row])
             return rowlist
 
-
 def get_column_data_from_resource(resource, idl):
     """
     return column data
@@ -379,7 +378,7 @@ def get_empty_by_basic_type(data):
         return 0
 
     elif type_ in ovs_types.RealType.python_types or \
-            type_ is ovs_types.RealType:
+    type_ is ovs_types.RealType:
         return 0.0
 
     elif type_ is types.BooleanType or \
@@ -530,8 +529,8 @@ def kv_index_to_row(index_values, parent, idl):
     """
     This subroutine fetches the row reference using the index as key.
     Current feature uses a single index and not a combination of multiple
-    indices. This is used for the new key/uuid type forward references
-    introduced for BGP
+    indices. This is used for the new key/uuid type forward references introduced
+    for BGP
     """
     index = index_values[0]
     column = parent.column
@@ -578,7 +577,7 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
                                 index = str(row.uuid)
                                 break
                     elif isinstance(column_data, types.DictType):
-                        for key, value in column_data.iteritems():
+                        for key,value in column_data.iteritems():
                             if value == row:
                                 # found the index
                                 index = key
@@ -595,7 +594,6 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
         index = '/'.join(tmp)
 
     return index
-
 
 def escaped_split(s_in):
     strings = re.split(r'(?<!\\)/', s_in)
