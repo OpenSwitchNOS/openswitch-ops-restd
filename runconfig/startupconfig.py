@@ -88,7 +88,7 @@ class StartupConfigUtil():
             is_new = True
 
         row.__setattr__('config', json.dumps(config))
-
+        print "\n config : %s" % json.dumps(config)
         result = txn.commit_block()
         error = txn.get_error()
 

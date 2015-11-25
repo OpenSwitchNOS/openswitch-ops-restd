@@ -74,7 +74,7 @@ class configTest(OpsVsiTest):
         _headers = {"Content-type": "multipart/form-data",
                     "Accept": "text/plain"}
         conn = httplib.HTTPConnection(ip_addr, 8091)
-        conn.request("PUT", path, json.dumps(_data), _headers)
+        conn.request("PUT", path, json.dumps(_data), headers=_headers)
         response = conn.getresponse()
 
         assert response.status == 200
@@ -82,12 +82,16 @@ class configTest(OpsVsiTest):
         _headers = {"Content-type": "application/x-www-form-urlencoded",
                     "Accept": "text/plain"}
         conn = httplib.HTTPConnection(ip_addr, 8091)
-        conn.request("GET", path, json.dumps(""), _headers)
+        conn.request("GET", path, headers=_headers)
         response = conn.getresponse()
         content = response.read()
-
+        info("\n######## Response ##########\n")
+        info(response)
+        info("\n######## Content before load ##########\n")
+        info(content)
         content = json.loads(content)
-
+        info("\n######## Content after load ##########\n")
+        info(content)
         assert response.status == 200
 
         assert ordered(content) == ordered(_data)
