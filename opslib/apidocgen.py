@@ -268,8 +268,7 @@ def genGetResource(table, parent_plurality, parents, resource_name, is_plural):
     return op
 
 
-def genPostResource(table, parent_plurality,
-                    parents, resource_name, is_plural):
+def genPostResource(table, parent_plurality, parents, resource_name, is_plural):
     op = {}
     op["summary"] = "Post operation"
     op["description"] = "Create a new resource instance"
@@ -415,6 +414,20 @@ def genBaseType(type, min, max, desc):
     return item
 
 
+# Generate definitions including "properties" and "required" for all columns.
+# Tuples of "properties" dictionary and "required" array are returned.
+def genAllColDefinition(cols, table_name, definitions):
+    properties = {}
+    required = []
+    for colName, col in cols:
+        properties[colName] = genDefinition(table_name, col, definitions)
+
+        if not col.is_optional:
+            required.append(col.name)
+
+    return properties, required
+
+
 # Generate definition for a column in a table
 def genDefinition(table_name, col, definitions):
     properties = {}
@@ -471,11 +484,9 @@ def genDefinition(table_name, col, definitions):
 
 
 def getDefinition(schema, table, definitions):
-    properties_config, properties_full = {}, {}
-    for colName, col in table.config.iteritems():
-        properties_config[colName] = \
-            genDefinition(table.name, col, definitions)
-        properties_full[colName] = genDefinition(table.name, col, definitions)
+    properties, required = genAllColDefinition(table.config.iteritems(),
+                                               table.name, definitions)
+
     # references are included in configuration as well
     for col_name in table.references:
         if table.references[col_name].relation == "reference":
@@ -493,10 +504,10 @@ def getDefinition(schema, table, definitions):
             else:
                 sub["$ref"] = "#/definitions/Resource"
                 sub["description"] = "Reference of " + child_table.name
-            properties_config[col_name] = sub
-            properties_full[col_name] = sub
+            properties[col_name] = sub
 
-    definitions[table.name + "Config"] = {"properties": properties_config}
+    definitions[table.name + "Config"] = {"properties": properties,
+                                          "required": required}
 
     # Construct full configuration definition to include subresources
     for col_name in table.children:
@@ -508,18 +519,8 @@ def getDefinition(schema, table, definitions):
             subtable_name = col_name
         sub = {}
         sub["$ref"] = "#/definitions/" + subtable_name + "ConfigData"
-        sub["description"] = "Referenced resource of " + subtable_name + \
-                             " instances"
-        properties_full[col_name] = sub
-
-        sub = {}
-        sub["type"] = "array"
-        sub["description"] = "A list of " + subtable_name \
-                             + " references"
-        item = {}
-        item["$ref"] = "#/definitions/Resource"
-        sub["items"] = item
-        properties_config[col_name] = sub
+        sub["description"] = "Referenced resource of " + subtable_name + " instances"
+        properties[col_name] = sub
 
     # Special treat /system resource
     # Include referenced resources at the top level as children
@@ -534,11 +535,11 @@ def getDefinition(schema, table, definitions):
 
             sub = {}
             sub["$ref"] = "#/definitions/" + subtable.name + "ConfigData"
-            sub["description"] = "Referenced resource of " + subtable.name + \
-                                 " instances"
-            properties_full[subtable_name] = sub
+            sub["description"] = "Referenced resource of " + subtable.name + " instances"
+            properties[subtable_name] = sub
 
-    definitions[table.name + "ConfigFull"] = {"properties": properties_full}
+    definitions[table.name + "ConfigFull"] = {"properties": properties,
+                                              "required": required}
 
     properties = {}
     definition = {}
@@ -567,15 +568,15 @@ def getDefinition(schema, table, definitions):
 
     definitions[table.name + "ConfigData"] = {"properties": properties}
 
-    properties = {}
-    for colName, col in table.status.iteritems():
-        properties[colName] = genDefinition(table.name, col, definitions)
-    definitions[table.name + "Status"] = {"properties": properties}
+    properties, required = genAllColDefinition(table.status.iteritems(),
+                                               table.name, definitions)
+    definitions[table.name + "Status"] = {"properties": properties,
+                                          "required": required}
 
-    properties = {}
-    for colName, col in table.stats.iteritems():
-        properties[colName] = genDefinition(table.name, col, definitions)
-    definitions[table.name + "Stats"] = {"properties": properties}
+    properties, required = genAllColDefinition(table.stats.iteritems(),
+                                               table.name, definitions)
+    definitions[table.name + "Stats"] = {"properties": properties,
+                                         "required": required}
 
     properties = {}
     sub = {}
@@ -726,6 +727,8 @@ def genAPI(paths, definitions, schema, table, resource_name, parent,
 
 def getFullConfigDef(schema, definitions):
     properties = {}
+
+
     definitions["FullConfig"] = {"properties": properties}
 
 
