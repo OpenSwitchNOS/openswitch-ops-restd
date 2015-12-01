@@ -136,6 +136,31 @@ def get_collection_json(resource, schema, idl, uri, selector, depth):
     return resource_result
 
 
+def get_null_free_data(row, column_keys, data):
+    # In this function we read the row retreived from idl. This data is used
+    # to discard the unnecessary empty columns from the data returned for
+    # get requests
+    get_data = {}
+    for c in column_keys:
+        attribute = row.__getattr__(c)
+        attribute_type = type(attribute)
+
+        # The below condition makes sure that we are not discarding any
+        # mandatory column even if it's value is empty
+        if column_keys[c].n_min > 0:
+            get_data[c] = data[c]
+        # The below condition is for optional columns
+        elif bool(attribute):
+            # Since idl returns all the data as list, dict or unicode, the
+            # following if...elif condition is used for approriate filtering
+            if attribute_type is list and attribute[0] != '':
+                get_data[c] = attribute[0]
+            elif attribute_type is dict or attribute_type is unicode:
+                get_data[c] = attribute
+
+    return get_data
+
+
 def get_row_json(row, table, schema, idl, uri, selector=None,
                  depth=0, depth_counter=0):
 
@@ -155,8 +180,18 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
             break
 
     config_data = utils.row_to_json(db_row, config_keys)
+    # To remove the unnecessary empty values from the config data
+    config_data = get_null_free_data(db_row, config_keys, config_data)
+
     stats_data = utils.row_to_json(db_row, stats_keys)
+    # To remove all the empty columns from the satistics data
+    stats_data = {key: stats_data[key] for key in stats_keys
+                  if stats_data[key]}
+
     status_data = utils.row_to_json(db_row, status_keys)
+    # To remove all the empty columns from the status data
+    status_data = {key: status_data[key] for key in status_keys
+                   if status_data[key]}
 
     reference_data = {}
     # get all references
@@ -164,9 +199,16 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
 
         if (depth_counter >= depth):
             depth = 0
-        reference_data[key] = get_column_json(key, row, table, schema,
-                                              idl, uri, selector, depth,
-                                              depth_counter)
+        temp = get_column_json(key, row, table, schema,
+                               idl, uri, selector, depth,
+                               depth_counter)
+
+        # The condition below is used to discard the empty list of references
+        # in the data returned for get requests
+        if temp:
+            reference_data[key] = temp
+        else:
+            continue
 
         # TODO Data categorization should be refactored as it
         # is also executed when sorting and filtering results
