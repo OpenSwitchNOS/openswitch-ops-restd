@@ -155,18 +155,26 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
             break
 
     config_data = utils.row_to_json(db_row, config_keys)
+
     stats_data = utils.row_to_json(db_row, stats_keys)
+
     status_data = utils.row_to_json(db_row, status_keys)
 
+    temp = ""
     reference_data = {}
     # get all references
     for key in reference_keys:
 
         if (depth_counter >= depth):
             depth = 0
-        reference_data[key] = get_column_json(key, row, table, schema,
+        temp = get_column_json(key, row, table, schema,
                                               idl, uri, selector, depth,
                                               depth_counter)
+
+        if temp :
+            reference_data[key] = temp
+        else :
+            continue
 
         # TODO Data categorization should be refactored as it
         # is also executed when sorting and filtering results
@@ -180,6 +188,7 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
             status_data.update({key: reference_data[key]})
         elif category == OVSDB_SCHEMA_STATS:
             stats_data.update({key: reference_data[key]})
+
 
     data = _categorize_by_selector(config_data, stats_data,
                                    status_data, selector)

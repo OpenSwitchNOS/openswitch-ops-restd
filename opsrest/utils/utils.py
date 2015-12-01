@@ -345,6 +345,9 @@ def row_to_json(row, column_keys):
             else:
                 attribute = get_empty_by_basic_type(column_keys[key].type)
 
+        if column_keys[key].n_min == 0 and not attribute:
+            continue
+
         value_type = column_keys[key].type
         if attribute_type is dict:
             value_type = column_keys[key].value_type
