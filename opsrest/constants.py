@@ -63,3 +63,10 @@ HTTP_HEADER_ACCESS_CONTROL_REQUEST_HEADERS = 'Access-Control-Request-Headers'
 
 # HTTP Content Types
 HTTP_CONTENT_TYPE_JSON = 'application/json; charset=UTF-8'
+
+# HTTP Request Types
+REQUEST_TYPE_CREATE = 'create'
+REQUEST_TYPE_UPDATE = 'update'
+REQUEST_TYPE_DELETE = 'delete'
+
+OPSPLUGIN_DIR = 'opsplugins'

@@ -21,7 +21,7 @@ import httplib
 from tornado.log import app_log
 from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
-
+from opsvalidator import validator
 
 def verify_http_method(resource, schema, http_method):
     '''
@@ -146,6 +146,13 @@ def verify_post_data(data, resource, schema, idl):
             return verified_reference_data
         else:
             verified_data.update(verified_reference_data)
+
+    res = validator.exec_validator(idl, schema, resource.next,
+                                   REQUEST_TYPE_CREATE, _data)
+    if res is False:
+        app_log.info("Validation failed.")
+        error_json = to_json_error("Validation failed.")
+        return {ERROR: error_json}
 
     # a non-root top-level table must be referenced by another resource
     # or ovsdb-server will garbage-collect it
