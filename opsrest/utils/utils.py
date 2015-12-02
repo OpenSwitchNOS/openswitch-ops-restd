@@ -544,35 +544,56 @@ def kv_index_to_row(index_values, parent, idl):
     return None
 
 
-def row_to_index(table_schema, row, uuid_sequencer=None):
+def row_to_index(row, table, restschema, idl, parent_row=None):
 
-    tmp = []
-    for index in table_schema.indexes:
-        if index == 'uuid':
-            if uuid_sequencer is None:
-                return str(row.uuid)
+    index = None
+    schema = restschema.ovs_tables[table]
+    indexes = schema.indexes
 
-            # Generate dummy index for all entries in tables that
-            #don't have anything besides UUID
-            if (table_schema.name, str(row.uuid)) not in uuid_sequencer:
+    # if index is just UUID
+    if len(indexes) == 1 and indexes[0] == 'uuid':
 
-                if (table_schema.name, 'last_sequence') not in uuid_sequencer:
-                    uuid_sequencer[(table_schema.name, 'last_sequence')] = 0
+        if schema.parent is not None:
+            parent = schema.parent
+            parent_schema = restschema.ovs_tables[parent]
 
-                next_sequence = uuid_sequencer[(table_schema.name,
-                                                'last_sequence')] + 1
-                uuid_sequencer[(table_schema.name, 'last_sequence')] = \
-                    next_sequence
-                uuid_sequencer[(table_schema.name, str(row.uuid))] = \
-                    table_schema.name + str(next_sequence)
+            # check in parent if a child 'column' exists
+            column_name = schema.plural_name
+            if column_name in parent_schema.references:
+                # look in all resources
+                parent_rows = None
+                if parent_row is not None:
+                    # TODO: check if this row exists in parent table
+                    parent_rows = [parent_row]
+                else:
+                    parent_rows = idl.tables[parent].rows
 
-            return uuid_sequencer[(table_schema.name, str(row.uuid))]
+                for item in parent_rows.itervalues():
+                    column_data = item.__getattr__(column_name)
+
+                    if isinstance(column_data, types.ListType):
+                        for ref in column_data:
+                            if ref.uuid == row:
+                                index = str(row.uuid)
+                                break
+                    elif isinstance(column_data, types.DictType):
+                        for key,value in column_data.iteritems():
+                            if value == row:
+                                # found the index
+                                index = key
+                                break
+
+                    if index is not None:
+                        break
         else:
-            val = str(row.__getattr__(index))
-            tmp.append(str(val.replace('/', '\/')))
+            index = str(row.uuid)
+    else:
+        tmp = []
+        for item in indexes:
+            tmp.append(urllib.quote(str(row.__getattr__(item)), safe=''))
+        index = '/'.join(tmp)
 
-    return '/'.join(tmp)
-
+    return index
 
 def escaped_split(s_in):
     strings = re.split(r'(?<!\\)/', s_in)
@@ -607,8 +628,8 @@ def get_parent_trace(table_name, row, schema, idl):
         parent_table = schema.ovs_tables[table.parent]
         column = get_parent_column_ref(parent_table.name, table.name, schema)
         row = get_parent_row(parent_table.name, row, column, schema, idl)
-        key_list = get_table_key(row, parent_table.name, schema, idl)
-        table_path = (parent_table.name, key_list)
+        index_list = get_table_key(row, parent_table.name, schema)
+        table_path = (parent_table.name, index_list)
         path.insert(0, table_path)
         table = parent_table
     return path
@@ -625,7 +646,7 @@ def get_parent_column_ref(table_name, table_ref, schema):
             return column_name
 
 
-def get_parent_row(table_name, child_row, column, schema, idl):
+def get_parent_row(table_name, row, column, schema, idl):
     """
     Get the row where the item is being referenced
     Returns idl.Row object
@@ -633,43 +654,23 @@ def get_parent_row(table_name, child_row, column, schema, idl):
     table = schema.ovs_tables[table_name]
     for uuid, row_ref in idl.tables[table_name].rows.iteritems():
         reflist = get_column_data_from_row(row_ref, column)
-        for value in reflist:
-            if table.references[column].kv_type:
-                db_col = row_ref.__getattr__(column)
-                row_value = db_col[value]
-                if row_value.uuid == child_row.uuid:
-                    return row_ref, value
-            else:
-                if value.uuid == child_row.uuid:
-                    return row_ref
+        for item in reflist:
+            if item.uuid == row.uuid:
+                return row_ref
 
 
-def get_table_key(row, table_name, schema, idl):
+def get_table_key(row, table_name, schema):
     """
     Get the row index
     Return the row index
     """
-    key_list = []
     table = schema.ovs_tables[table_name]
-
-    # Verify if is kv reference
-    if table.parent:
-        parent_table = schema.ovs_tables[table.parent]
-        column_ref = get_parent_column_ref(parent_table.name, table.name,
-                                           schema)
-        if parent_table.references[column_ref].kv_type:
-            parent_row, key = get_parent_row(parent_table.name,
-                                             row, column_ref, schema, idl)
-            key_list.append(str(key))
-            return key_list
-
-    # If not is a kv_reference return the index
     indexes = table.indexes
+    index_list = []
     for index in indexes:
         if index == 'uuid':
-            key_list.append(str(row.uuid))
+            index_list.append(str(row.uuid))
         else:
             value = urllib.quote(str(row.__getattr__(index)), safe='')
-            key_list.append(value)
-
-    return key_list
+            index_list.append(value)
+    return index_list
