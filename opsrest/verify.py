@@ -17,11 +17,13 @@ from opsrest.utils import utils
 from opsrest.constants import *
 import types
 import httplib
+import json
 
 from tornado.log import app_log
 from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
 from opsvalidator import validator
+from opsvalidator.error import ValidationError
 
 def verify_http_method(resource, schema, http_method):
     '''
@@ -147,8 +149,14 @@ def verify_post_data(data, resource, schema, idl):
         else:
             verified_data.update(verified_reference_data)
 
-    res = validator.exec_validator(idl, schema, resource.next,
+    # call validation routines here
+    try:
+        res = validator.exec_validator(idl, schema, resource.next,
                                    REQUEST_TYPE_CREATE, _data)
+    except ValidationError as e:
+        app_log.info("Validation failed.")
+        return {ERROR: json.loads(str(e))}
+
     if res is False:
         app_log.info("Validation failed.")
         error_json = to_json_error("Validation failed.")
