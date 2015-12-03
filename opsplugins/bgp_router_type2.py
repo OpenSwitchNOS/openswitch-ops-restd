@@ -1,5 +1,5 @@
 from opsvalidator.base import *
-from opsvalidator.error import ValidationError
+from opsvalidator.error import ValidationError, errors
 from tornado.log import app_log
 
 class BgpRouterValidatorType2(BaseValidator):
@@ -12,9 +12,8 @@ class BgpRouterValidatorType2(BaseValidator):
         app_log.info("This validation routine will fail")
         if not validation_result:
             code = 10001
-            message = 'BGP Router validation failed'
             detail = ['invalid asn', 'invalid type']
 
-            raise ValidationError(code, message, detail)
+            raise ValidationError(code, detail)
         else:
             return True

@@ -155,7 +155,7 @@ def verify_post_data(data, resource, schema, idl):
                                  REQUEST_TYPE_CREATE, _data)
     except ValidationError as e:
         app_log.info("Validation failed.")
-        return {ERROR: json.loads(str(e))}
+        return {ERROR: e.error}
 
     # a non-root top-level table must be referenced by another resource
     # or ovsdb-server will garbage-collect it
