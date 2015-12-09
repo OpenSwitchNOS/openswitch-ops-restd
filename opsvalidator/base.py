@@ -28,12 +28,9 @@ class BaseValidator(object):
 
     def validate_create(self, validation_args):
         app_log.debug("validate_create not implemented for " + self.type())
-        return True
 
     def validate_update(self, validation_args):
         app_log.debug("validate_update not implemented for " + self.type())
-        return True
 
     def validate_delete(self, validation_args):
         app_log.debug("validate_delete not implemented for " + self.type())
-        return True

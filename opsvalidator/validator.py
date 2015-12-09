@@ -59,24 +59,18 @@ def exec_validator(idl, schema, resource, method, data=None):
             app_log.debug("Invoking validator \"%s\" for resource \"%s\"" %
                           (validator.type(), resource_name))
 
-            if validate_by_method(validator, method,
-                                  validation_args) is not True:
-                app_log.debug("Validation failed for %s" % validator.type())
-                return False
+            validate_by_method(validator, method, validation_args)
     else:
         app_log.debug("Custom validator for \"%s\" does not exist" %
                       resource_name)
 
-    return True
-
 
 def validate_by_method(validator, method, validation_args):
     if method == constants.REQUEST_TYPE_CREATE:
-        return validator.validate_create(validation_args)
+        validator.validate_create(validation_args)
     elif method == constants.REQUEST_TYPE_UPDATE:
-        return validator.validate_update(validation_args)
+        validator.validate_update(validation_args)
     elif method == constants.REQUEST_TYPE_DELETE:
-        return validator.validate_delete(validation_args)
+        validator.validate_delete(validation_args)
     else:
         app_log.debug("Unsupported validation for method %s" % method)
-        return True

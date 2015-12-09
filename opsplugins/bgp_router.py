@@ -6,4 +6,3 @@ class BgpRouterValidator(BaseValidator):
 
     def validate_create(self, validation_args):
         app_log.info("validate_create from BgpRouterValidator")
-        return True
