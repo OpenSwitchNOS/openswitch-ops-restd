@@ -1,31 +1,29 @@
-errors = {
+VERIFICATION_FAILED = 10001
+NO_REFERENCED_BY = 10002
+FAILED_REFERENCED_BY = 10003
 
-        10001 : 'Validation error',
-        10002 : 'Resource already exists in DB.',
-        10003 : 'Resource does not exist in DB',
-        10004 : 'Table does not exist in DB.',
-        10005 : 'POST not allowed.',
-        10006 : 'PUT not allowed.',
+error_messages = {
+    VERIFICATION_FAILED: 'Verification failed',
+    NO_REFERENCED_BY: 'Missing referenced_by resource',
+    FAILED_REFERENCED_BY: 'Verification failed for referenced_by resource'
+}
 
-        }
 
 class ValidationException(Exception):
+    """Base class for Validator exceptions"""
     pass
 
 
 class ValidationError(ValidationException):
     """
-    Validator modules raise ValidationError exception upon failure
+    Validator modules raise ValidationError upon failure
     """
-    default_error_code = 10001
-    default_error_message = errors[default_error_code]
-    default_detail = {}
+    def __init__(self, code, details=""):
+        if code not in error_messages:
+            code = VERIFICATION_FAILED
 
-    def __init__(self, code=None, detail=None):
-        code = code or self.default_error_code
-        message = errors[code]
-        detail = detail or self.default_detail
+        message = error_messages[code]
 
         self.error = {'code': code,
                       'message': message,
-                      'detail': detail}
+                      'details': details}
