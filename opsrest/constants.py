@@ -65,3 +65,10 @@ HTTP_HEADER_CONDITIONAL_IF_MATCH = 'If-Match'
 
 # HTTP Content Types
 HTTP_CONTENT_TYPE_JSON = 'application/json; charset=UTF-8'
+
+# HTTP Request Types
+REQUEST_TYPE_CREATE = 'POST'
+REQUEST_TYPE_UPDATE = 'PUT'
+REQUEST_TYPE_DELETE = 'DELETE'
+
+OPSPLUGIN_DIR = 'opsplugins'

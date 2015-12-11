@@ -17,10 +17,14 @@ from opsrest.utils import utils
 from opsrest.constants import *
 import types
 import httplib
+import json
+import copy
 
 from tornado.log import app_log
 from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
+from opsvalidator import validator
+from opsvalidator.error import ValidationError
 
 
 def verify_http_method(resource, schema, http_method):
@@ -93,21 +97,41 @@ def verify_http_method(resource, schema, http_method):
         return False
 
 
+def custom_validations(resource, schema, idl, method, data=None):
+    try:
+        validator.exec_validator(idl, schema, resource, method, data)
+        return True
+    except ValidationError as e:
+        return {ERROR: e.error}
+
+
 def verify_data(data, resource, schema, idl, http_method):
+    verified_data = {}
 
     if http_method == 'POST':
-        return verify_post_data(data, resource, schema, idl)
+        verified_data = verify_post_data(data, resource, schema, idl)
 
     elif http_method == 'PUT':
-        return verify_put_data(data, resource, schema, idl)
+        verified_data = verify_put_data(data, resource, schema, idl)
+
+    if ERROR not in verified_data:
+        result = custom_validations(resource, schema, idl, http_method, data)
+
+        if result is not True:
+            app_log.debug("Custom validations failed.")
+            return result
+
+    return verified_data
 
 
 def verify_post_data(data, resource, schema, idl):
 
-    _data = get_config_data(data)
+    cfg_data = get_config_data(data)
 
-    if ERROR in _data:
-        return _data
+    if ERROR in cfg_data:
+        return cfg_data
+
+    _data = copy.deepcopy(cfg_data)
 
     # verify config and reference columns data
     verified_data = {}
@@ -185,10 +209,12 @@ def verify_post_data(data, resource, schema, idl):
 
 def verify_put_data(data, resource, schema, idl):
 
-    _data = get_config_data(data)
+    cfg_data = get_config_data(data)
 
-    if ERROR in _data:
-        return _data
+    if ERROR in cfg_data:
+        return cfg_data
+
+    _data = copy.deepcopy(cfg_data)
 
     # We neet to verify System table
     if resource.next is None:

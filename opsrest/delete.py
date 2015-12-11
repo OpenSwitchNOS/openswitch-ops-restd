@@ -30,9 +30,17 @@ def delete_resource(resource, schema, txn, idl):
             break
         resource = resource.next
 
+    http_method = 'DELETE'
+
     # Check for invalid resource deletion
-    if verify.verify_http_method(resource, schema, "DELETE") is False:
+    if verify.verify_http_method(resource, schema, http_method) is False:
         raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
+
+    result = verify.custom_validations(resource, schema, idl, http_method)
+
+    if result is not True:
+        app_log.debug("Custom validations failed.")
+        return result
 
     if resource.relation == OVSDB_SCHEMA_CHILD:
 
