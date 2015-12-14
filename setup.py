@@ -20,7 +20,7 @@ setup(
     version='1.0',
     py_modules=['restd'],
     packages=['opsrest', 'opsrest.handlers', 'opsrest.utils', 'opslib',
-              'runconfig'],
+              'runconfig', 'opsvalidator'],
     entry_points={
         'console_scripts': ['restd = restd:main', ]
     }
