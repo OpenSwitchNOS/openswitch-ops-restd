@@ -17,10 +17,14 @@ from opsrest.utils import utils
 from opsrest.constants import *
 import types
 import httplib
+import json
+import copy
 
 from tornado.log import app_log
 from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
+from opsvalidator import validator
+from opsvalidator.error import ValidationError
 
 
 def verify_http_method(resource, schema, http_method):
@@ -94,20 +98,32 @@ def verify_http_method(resource, schema, http_method):
 
 
 def verify_data(data, resource, schema, idl, http_method):
+    verified_data = {}
 
-    if http_method == 'POST':
-        return verify_post_data(data, resource, schema, idl)
+    if http_method == REQUEST_TYPE_CREATE:
+        verified_data = verify_post_data(data, resource, schema, idl)
 
-    elif http_method == 'PUT':
-        return verify_put_data(data, resource, schema, idl)
+    elif http_method == REQUEST_TYPE_UPDATE:
+        verified_data = verify_put_data(data, resource, schema, idl)
+
+    if ERROR not in verified_data:
+        try:
+            validator.exec_validator(idl, schema, resource, http_method, data)
+        except ValidationError as e:
+            app_log.debug("Custom validations failed.")
+            return {ERROR: e.error}
+
+    return verified_data
 
 
 def verify_post_data(data, resource, schema, idl):
 
-    _data = get_config_data(data)
+    cfg_data = get_config_data(data)
 
-    if ERROR in _data:
-        return _data
+    if ERROR in cfg_data:
+        return cfg_data
+
+    _data = copy.deepcopy(cfg_data)
 
     # verify config and reference columns data
     verified_data = {}
@@ -185,10 +201,12 @@ def verify_post_data(data, resource, schema, idl):
 
 def verify_put_data(data, resource, schema, idl):
 
-    _data = get_config_data(data)
+    cfg_data = get_config_data(data)
 
-    if ERROR in _data:
-        return _data
+    if ERROR in cfg_data:
+        return cfg_data
+
+    _data = copy.deepcopy(cfg_data)
 
     # We neet to verify System table
     if resource.next is None:
