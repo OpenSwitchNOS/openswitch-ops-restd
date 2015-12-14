@@ -485,6 +485,25 @@ def genDefinition(table_name, col, definitions):
         return genBaseType(col.type, col.rangeMin, col.rangeMax, col.desc)
 
 
+def refProperties(schema, table, col_name):
+    child_name = table.references[col_name].ref_table
+    child_table = schema.ovs_tables[child_name]
+
+    sub = {}
+    if table.references[col_name].is_plural:
+        sub["type"] = "array"
+        sub["description"] = "A list of " + child_table.name \
+                              + " references"
+        item = {}
+        item["$ref"] = "#/definitions/Resource"
+        sub["items"] = item
+    else:
+        sub["$ref"] = "#/definitions/Resource"
+        sub["description"] = "Reference of " + child_table.name
+
+    return sub
+
+
 def getDefinition(schema, table, definitions):
     properties_config, required = genAllColDefinition(table.config.iteritems(),
                                                       table.name, definitions)
@@ -493,20 +512,8 @@ def getDefinition(schema, table, definitions):
     # references are included in configuration as well
     for col_name in table.references:
         if table.references[col_name].relation == "reference":
-            child_name = table.references[col_name].ref_table
-            child_table = schema.ovs_tables[child_name]
-
             sub = {}
-            if table.references[col_name].is_plural:
-                sub["type"] = "array"
-                sub["description"] = "A list of " + child_table.name \
-                                     + " references"
-                item = {}
-                item["$ref"] = "#/definitions/Resource"
-                sub["items"] = item
-            else:
-                sub["$ref"] = "#/definitions/Resource"
-                sub["description"] = "Reference of " + child_table.name
+            sub = refProperties(schema, table, col_name)
             properties_config[col_name] = sub
             properties_full[col_name] = sub
 
@@ -521,6 +528,10 @@ def getDefinition(schema, table, definitions):
         else:
             # child added by parent relationship
             subtable_name = col_name
+
+        if col_name in table.references:
+            if table.references[col_name].category == "status":
+                continue
         sub = {}
         sub["$ref"] = "#/definitions/" + subtable_name + "ConfigData"
         sub["description"] = "Referenced resource of " + subtable_name + \
@@ -585,6 +596,13 @@ def getDefinition(schema, table, definitions):
 
     properties, required = genAllColDefinition(table.status.iteritems(),
                                                table.name, definitions)
+
+    for col_name in table.references:
+        if table.references[col_name].category == "status":
+            sub = {}
+            sub = refProperties(schema, table, col_name)
+            properties[col_name] = sub
+
     definitions[table.name + "Status"] = {"properties": properties,
                                           "required": required}
 
