@@ -351,6 +351,14 @@ def verify_container_values_type(column_name, column_data, request_data):
 
     elif column_data.is_dict:
         for key, value in request_data.iteritems():
+            # Check if request data has unknown keys for columns other than
+            # external_ids and other_config (which are common columns and should
+            # accept any keys)
+            if column_name != "external_ids" and column_name != "other_config":
+                if column_data.kvs and key not in column_data.kvs:
+                    error_json =  to_json_error("Unknown key %s" % key,
+                                                None, column_name)
+                    break
 
             value_type = type(value)
 
