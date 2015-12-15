@@ -341,22 +341,8 @@
                                 ]
                             }
                         }
-                    },
-                    "3": {
-                        "bgp_neighbors": {
-                            "3.3.3.3": {
-                                "description": [
-                                    "router2"
-                                ],
-                                "remote_as": [
-                                    1
-                                ],
-                                "weight": [
-                                    0
-                                ]
-                            }
-                        }
                     }
+
                 },
                 "name": "vrf_default",
                 "ports": [
