@@ -23,6 +23,12 @@ from opsrest.utils.utils import to_json_error
 from ovs.db import types as ovs_types
 
 
+def is_common_column(column_name):
+    for name in OVSDB_COMMON_COLUMNS:
+        if column_name == name:
+            return True
+    return False
+
 def verify_http_method(resource, schema, http_method):
     '''
     Operations are allowed on each schema table/resource:
@@ -351,6 +357,15 @@ def verify_container_values_type(column_name, column_data, request_data):
 
     elif column_data.is_dict:
         for key, value in request_data.iteritems():
+            # Check if request data has unknown keys for columns other than
+            # external_ids and other_config (which are common columns and should
+            # accept any keys). Note: common columns which do not require key
+            # validation can be added to OVSDB_COMMON_COLUMNS array.
+            if is_common_column(column_name) == False:
+                if column_data.kvs and key not in column_data.kvs:
+                    error_json =  to_json_error("Unknown key %s" % key,
+                                                None, column_name)
+                    break
 
             value_type = type(value)
 
@@ -361,8 +376,7 @@ def verify_container_values_type(column_name, column_data, request_data):
                 # types, so each value must be checked if kvs type exists
 
                 if value_type in ovs_types.StringType.python_types \
-                        and column_data.kvs:
-
+                        and column_data.kvs and key in column_data.kvs:
                     kvs_value_type = column_data.kvs[key]['type']
                     converted_value = \
                         convert_string_to_value_by_type(value, kvs_value_type)
@@ -417,7 +431,7 @@ def verify_valid_attribute_values(request_data, column_data, column_name):
 
     # If data has key-values dict defined, check for missing/invalid keys
     # It's assumed type is validated, meaning kvs is defined for dicts only
-    elif column_data.kvs:
+    elif column_data.kvs and is_common_column(column_name) == False:
 
         valid_keys = set(column_data.kvs.keys())
         data_keys = set(request_data.keys())
@@ -564,7 +578,7 @@ def verify_attribute_range(column_name, column_data, request_data):
                 max_ = column_data.valueRangeMax
 
                 # If kvs is defined, ranges shouldbe taken from it
-                if column_data.kvs:
+                if column_data.kvs and key in column_data.kvs:
                     # Skip range check for booleans
                     if column_data.kvs[key]['type'] == ovs_types.BooleanType:
                         continue
