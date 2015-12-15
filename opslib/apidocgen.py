@@ -416,6 +416,21 @@ def genBaseType(type, min, max, desc):
     return item
 
 
+def genBaseTypeList(type, min, max, desc):
+    sub = {}
+    sub["type"] = "array"
+    sub["description"] = desc
+    item = {}
+    if str(type) == "integer":
+        item["$ref"] = "#/definitions/ResourceInt"
+    else:
+        item["$ref"] = "#/definitions/Resource"
+
+    sub["items"] = item
+
+    return sub
+
+
 # Generate definitions including "properties" and "required" for all columns.
 # Tuples of "properties" dictionary and "required" array are returned.
 def genAllColDefinition(cols, table_name, definitions):
@@ -480,6 +495,8 @@ def genDefinition(table_name, col, definitions):
         sub["$ref"] = "#/definitions/" + table_name + "-" + col.name + "-KV"
         sub["description"] = "Key-Value pairs for " + col.name
         return sub
+    elif col.is_list:
+        return genBaseTypeList(col.type, col.rangeMin, col.rangeMax, col.desc)
     else:
         # simple attributes
         return genBaseType(col.type, col.rangeMin, col.rangeMax, col.desc)
@@ -521,6 +538,7 @@ def getDefinition(schema, table, definitions):
         else:
             # child added by parent relationship
             subtable_name = col_name
+
         sub = {}
         sub["$ref"] = "#/definitions/" + subtable_name + "ConfigData"
         sub["description"] = "Referenced resource of " + subtable_name + \
@@ -928,6 +946,11 @@ def getFullAPI(schema):
     definition["type"] = "string"
     definition["description"] = "Resource URI"
     definitions["Resource"] = definition
+
+    definition = {}
+    definition["type"] = "integer"
+    definition["description"] = "Resource Integer URI"
+    definitions["ResourceInt"] = definition
 
     properties = {}
     definition = {}
