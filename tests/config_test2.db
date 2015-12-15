@@ -1,4 +1,5 @@
 
+
     {
         "Interface":
         {
@@ -706,54 +707,11 @@
                                     ]
                                 }
                             }
-                        },
-                        "2":
-                        {
-                            "bgp_neighbors":
-                            {
-                                "2.2.2.2":
-                                {
-                                    "remote_as":
-                                    [
-                                        1
-                                    ],
-                                    "description":
-                                    [
-                                        "router2"
-                                    ],
-                                    "weight":
-                                    [
-                                        0
-                                    ]
-                                }
-                            }
-                        },
-                        "3":
-                        {
-                            "bgp_neighbors":
-                            {
-                                "3.3.3.3":
-                                {
-                                    "remote_as":
-                                    [
-                                        1
-                                    ],
-                                    "description":
-                                    [
-                                        "router2"
-                                    ],
-                                    "weight":
-                                    [
-                                        0
-                                    ]
-                                }
-                            }
                         }
                     },
                     "name": "vrf_default",
                     "ports":
                     [
-                        "2",
                         "1"
                     ]
                 }
