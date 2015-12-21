@@ -136,6 +136,18 @@ def get_collection_json(resource, schema, idl, uri, selector, depth):
     return resource_result
 
 
+def get_null_free_data(column_keys, data):
+    # In this function we read the config data and use it to discard the
+    # empty columns (None, empty list or empty dict) from the data returned
+    # for get requests
+    get_data = {}
+    for c in column_keys:
+        if (not(data[c] == None or data[c] == {} or data[c] == [])):
+            get_data[c] = data[c]
+
+    return get_data
+
+
 def get_row_json(row, table, schema, idl, uri, selector=None,
                  depth=0, depth_counter=0):
 
@@ -155,8 +167,18 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
             break
 
     config_data = utils.row_to_json(db_row, config_keys)
+    # To remove the unnecessary empty values from the config data
+    config_data = get_null_free_data(config_keys, config_data)
+
     stats_data = utils.row_to_json(db_row, stats_keys)
+    # To remove all the empty columns from the satistics data
+    stats_data = {key: stats_data[key] for key in stats_keys
+                  if stats_data[key]}
+
     status_data = utils.row_to_json(db_row, status_keys)
+    # To remove all the empty columns from the status data
+    status_data = {key: status_data[key] for key in status_keys
+                   if status_data[key]}
 
     reference_data = {}
     # get all references
@@ -164,9 +186,16 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
 
         if (depth_counter >= depth):
             depth = 0
-        reference_data[key] = get_column_json(key, row, table, schema,
-                                              idl, uri, selector, depth,
-                                              depth_counter)
+        temp = get_column_json(key, row, table, schema,
+                               idl, uri, selector, depth,
+                               depth_counter)
+
+        # The condition below is used to discard the empty list of references
+        # in the data returned for get requests
+        if temp:
+            reference_data[key] = temp
+        else:
+            continue
 
         # TODO Data categorization should be refactored as it
         # is also executed when sorting and filtering results
@@ -616,6 +645,8 @@ def filter_get_results(get_data, filters, schema, table):
 
                 if filter_set.difference(value_set) == filter_set:
                     valid = False
+            else:
+                valid = False
 
         if valid:
             filtered_data.append(element)
@@ -682,10 +713,21 @@ def sort_get_results(get_data, sort_by_columns, reverse_=False):
     # The lambda function returns a tuple with the comparable
     # values of each column, so that sorted() use them as the
     # compare keys for dictionaries in the GET results
+    sort_by_columns_modified = []
+    flag = 1
+    for c in sort_by_columns:
+        for data in get_data:
+            if c not in data:
+                flag = 0
+                break
+        if flag:
+            sort_by_columns_modified.append(c)
+        flag=1
+
     sorted_data = sorted(
         get_data,
         key=lambda item: tuple(sort_value_to_lower(item[k])
-                               for k in sort_by_columns),
+                               for k in sort_by_columns_modified),
         reverse=reverse_)
 
     return sorted_data
