@@ -155,8 +155,20 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
             break
 
     config_data = utils.row_to_json(db_row, config_keys)
+    # To remove the unnecessary empty values from the config data
+    config_data = {key:config_data[key] for key in config_keys
+                   if not(config_data[key] == None or
+                       config_data[key] == {} or config_data[key] == [])}
+
     stats_data = utils.row_to_json(db_row, stats_keys)
+    # To remove all the empty columns from the satistics data
+    stats_data = {key: stats_data[key] for key in stats_keys
+                  if stats_data[key]}
+
     status_data = utils.row_to_json(db_row, status_keys)
+    # To remove all the empty columns from the status data
+    status_data = {key: status_data[key] for key in status_keys
+                   if status_data[key]}
 
     reference_data = {}
     # get all references
@@ -164,9 +176,16 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
 
         if (depth_counter >= depth):
             depth = 0
-        reference_data[key] = get_column_json(key, row, table, schema,
-                                              idl, uri, selector, depth,
-                                              depth_counter)
+        temp = get_column_json(key, row, table, schema,
+                               idl, uri, selector, depth,
+                               depth_counter)
+
+        # The condition below is used to discard the empty list of references
+        # in the data returned for get requests
+        if not temp:
+            continue
+
+        reference_data[key] = temp
 
         # TODO Data categorization should be refactored as it
         # is also executed when sorting and filtering results
@@ -616,6 +635,8 @@ def filter_get_results(get_data, filters, schema, table):
 
                 if filter_set.difference(value_set) == filter_set:
                     valid = False
+            else:
+                valid = False
 
         if valid:
             filtered_data.append(element)
@@ -677,25 +698,33 @@ def paginate_get_results(get_data, offset=None, limit=None):
     return sliced_get_data
 
 
+def process_sort_value(item, key):
+    if key in item:
+        value = item[key]
+        if isinstance(value, str):
+            value = value.lower()
+    else:
+        # We might in the future need to change this to
+        # process the value's type accordingly, but sort
+        # is currently done ascii-wise so this should be ok.
+        value = ""
+
+    return value
+
+
 def sort_get_results(get_data, sort_by_columns, reverse_=False):
 
     # The lambda function returns a tuple with the comparable
     # values of each column, so that sorted() use them as the
     # compare keys for dictionaries in the GET results
+
     sorted_data = sorted(
         get_data,
-        key=lambda item: tuple(sort_value_to_lower(item[k])
+        key=lambda item: tuple(process_sort_value(item, k)
                                for k in sort_by_columns),
         reverse=reverse_)
 
     return sorted_data
-
-
-def sort_value_to_lower(value):
-    if isinstance(value, str):
-        return value.lower()
-    else:
-        return value
 
 
 def flatten_get_data(data):
