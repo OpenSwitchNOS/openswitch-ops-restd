@@ -351,31 +351,18 @@
     },
     "Port": {
         "p1": {
-            "admin": [],
-            "bond_active_slave": [],
-            "bond_mode": [],
             "bond_options": {},
             "external_ids": {},
-            "ip4_address": [],
-            "ip4_address_secondary": [],
-            "ip6_address": [],
-            "ip6_address_secondary": [],
-            "lacp": [],
-            "mac": [],
             "name": "p1",
             "other_config": {},
-            "tag": [],
             "trunks": [],
-            "vlan_mode": [],
             "vlan_options": {}
         }
     },
     "System": {
         "aaa": {
             "fallback": "false",
-            "radius": "false",
-            "ssh_passkeyauthentication": "enable",
-            "ssh_publickeyauthentication": "enable"
+            "radius": "false"
         },
         "asset_tag_number": "",
         "bridges": {

@@ -237,9 +237,7 @@
     "System": {
         "aaa": {
             "fallback": "false",
-            "radius": "false",
-            "ssh_passkeyauthentication": "enable",
-            "ssh_publickeyauthentication": "enable"
+            "radius": "false"
         },
         "asset_tag_number": "",
         "bridges": {
@@ -263,24 +261,6 @@
         },
         "vrfs": {
             "vrf_default": {
-                "Route": {
-                    "static/10.10.10.0\\/24": {
-                        "address_family": [
-                            "ipv4"
-                        ],
-                        "nexthops": {
-                            "Nexthop1": {
-                                "ip_address": [
-                                    "11.11.11.1"
-                                ]
-                            }
-                        },
-                        "prefix": "10.10.10.0/24",
-                        "sub_address_family": [
-                            "unicast"
-                        ]
-                    }
-                },
                 "name": "vrf_default"
             }
         }

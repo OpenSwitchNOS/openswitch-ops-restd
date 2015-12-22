@@ -641,9 +641,7 @@
             "aaa":
             {
                 "radius": "false",
-                "fallback": "true",
-                "ssh_publickeyauthentication": "enable",
-                "ssh_passkeyauthentication": "enable"
+                "fallback": "true"
             },
             "hostname": "switch",
             "asset_tag_number": "",
@@ -655,35 +653,6 @@
             {
                 "vrf_default":
                 {
-                    "Route":
-                    {
-                        "static/10.0.0.0%2F8":
-                        {
-                            "distance":
-                            [
-                                1
-                            ],
-                            "prefix": "10.0.0.0/8",
-                            "sub_address_family":
-                            [
-                                "unicast"
-                            ],
-                            "address_family":
-                            [
-                                "ipv4"
-                            ],
-                            "nexthops":
-                            {
-                                "Nexthop1":
-                                {
-                                    "ip_address":
-                                    [
-                                        "10.0.0.1"
-                                    ]
-                                }
-                            }
-                        }
-                    },
                     "bgp_routers":
                     {
                         "1":
@@ -699,48 +668,6 @@
                                     "description":
                                     [
                                         "router1"
-                                    ],
-                                    "weight":
-                                    [
-                                        0
-                                    ]
-                                }
-                            }
-                        },
-                        "2":
-                        {
-                            "bgp_neighbors":
-                            {
-                                "2.2.2.2":
-                                {
-                                    "remote_as":
-                                    [
-                                        1
-                                    ],
-                                    "description":
-                                    [
-                                        "router2"
-                                    ],
-                                    "weight":
-                                    [
-                                        0
-                                    ]
-                                }
-                            }
-                        },
-                        "3":
-                        {
-                            "bgp_neighbors":
-                            {
-                                "3.3.3.3":
-                                {
-                                    "remote_as":
-                                    [
-                                        1
-                                    ],
-                                    "description":
-                                    [
-                                        "router2"
                                     ],
                                     "weight":
                                     [
