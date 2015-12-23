@@ -24,12 +24,15 @@ import hashlib
 from opsrest.resource import Resource
 from opsrest.parse import parse_url_path
 from opsrest.constants import *
-from opsrest.utils.utils import *
+from opsrest.utils import utils
+from opsrest.exceptions import *
 
 from opsrest import get, post, delete, put
 
 import userauth
 from opsrest.settings import settings
+
+# TODO refactor common handler functions
 
 
 class BaseHandler(web.RequestHandler):
@@ -55,6 +58,9 @@ class BaseHandler(web.RequestHandler):
         if HTTP_HEADER_ORIGIN in self.request.headers:
             self.set_header("Access-Control-Allow-Origin",
                             self.request.headers[HTTP_HEADER_ORIGIN])
+
+    def get_current_user(self):
+        return userauth.get_request_user(self)
 
 
 class LoginHandler(BaseHandler):
@@ -178,36 +184,35 @@ class AutoHandler(BaseHandler):
                                             self.schema, self.txn,
                                             self.idl)
 
-                if result == INCOMPLETE:
+                status = result.status
+                if status == INCOMPLETE:
                     self.ref_object.manager.monitor_transaction(self.txn)
                     # on 'incomplete' state we wait until the transaction
                     # completes with either success or failure
                     yield self.txn.event.wait()
-                    result = self.txn.status
+                    status = self.txn.status
 
-                app_log.debug("POST operation result: %s", result)
-                if self.successful_transaction(result):
-                    self.set_status(httplib.CREATED)
+                # complete transaction
+                self.transaction_complete(status)
 
-            except ValueError, e:
+            except APIException as e:
+                self.on_exception(e)
+
+            except ValueError as e:
                 self.set_status(httplib.BAD_REQUEST)
                 self.set_header(HTTP_HEADER_CONTENT_TYPE,
                                 HTTP_CONTENT_TYPE_JSON)
-                self.write(to_json_error(e))
+                self.write(utils.to_json_error(e))
 
-            # TODO: Improve exception handler
-            except Exception, e:
-                app_log.debug("Unexpected exception: %s", e)
-
-                self.txn.abort()
-                self.set_status(httplib.INTERNAL_SERVER_ERROR)
+            except Exception as e:
+                self.on_exception(e)
 
         else:
             self.set_status(httplib.LENGTH_REQUIRED)
 
         self.finish()
 
-    def compute_etag(self, data = None):
+    def compute_etag(self, data=None):
         if data is None:
             return super(AutoHandler, self).compute_etag()
 
@@ -216,18 +221,19 @@ class AutoHandler(BaseHandler):
             hasher.update(element)
         return '"%s"' % hasher.hexdigest()
 
-
     def process_if_match(self):
         if HTTP_HEADER_CONDITIONAL_IF_MATCH in self.request.headers:
+            selector = self.get_query_argument(REST_QUERY_PARAM_SELECTOR, None)
             result = get.get_resource(self.idl, self.resource_path,
                                       self.schema, self.request.path,
-                                      None, self.request.query_arguments)
+                                      selector, self.request.query_arguments)
             if result is None:
                 self.set_status(httplib.PRECONDITION_FAILED)
                 return False
 
             match = False
-            etags = self.request.headers.get(HTTP_HEADER_CONDITIONAL_IF_MATCH,"").split(',')
+            etags = self.request.headers.get(HTTP_HEADER_CONDITIONAL_IF_MATCH,
+                                             "").split(',')
             current_etag = self.compute_etag(json.dumps(result))
             for e in etags:
                 if e == current_etag or e == '"*"':
@@ -241,7 +247,8 @@ class AutoHandler(BaseHandler):
 
                 data = json.loads(self.request.body)
                 if OVSDB_SCHEMA_CONFIG in data:
-                    if data[OVSDB_SCHEMA_CONFIG] == result[OVSDB_SCHEMA_CONFIG]:
+                    if data[OVSDB_SCHEMA_CONFIG] == \
+                            result[OVSDB_SCHEMA_CONFIG]:
                         self.set_status(httplib.OK)
                         return False
                 self.set_status(httplib.PRECONDITION_FAILED)
@@ -249,46 +256,44 @@ class AutoHandler(BaseHandler):
 
         return True
 
-
     @gen.coroutine
     def put(self):
         if HTTP_HEADER_CONTENT_LENGTH in self.request.headers:
             try:
                 proceed = self.process_if_match()
                 if proceed:
-                  # get the PUT body
-                  update_data = json.loads(self.request.body)
-                  # create a new ovsdb transaction
-                  self.txn = self.ref_object.manager.get_new_transaction()
+                    # get the PUT body
+                    update_data = json.loads(self.request.body)
+                    # create a new ovsdb transaction
+                    self.txn = self.ref_object.manager.get_new_transaction()
 
-                  # put_resource performs data verfication, prepares and
-                  # commits the ovsdb transaction
-                  result = put.put_resource(update_data, self.resource_path,
-                                            self.schema, self.txn, self.idl)
+                    # put_resource performs data verfication, prepares and
+                    # commits the ovsdb transaction
+                    result = put.put_resource(update_data, self.resource_path,
+                                              self.schema, self.txn, self.idl)
 
-                  if result == INCOMPLETE:
-                      self.ref_object.manager.monitor_transaction(self.txn)
-                      # on 'incomplete' state we wait until the transaction
-                      # completes with either success or failure
-                      yield self.txn.event.wait()
-                      result = self.txn.status
+                    status = result.status
+                    if status == INCOMPLETE:
+                        self.ref_object.manager.monitor_transaction(self.txn)
+                        # on 'incomplete' state we wait until the transaction
+                        # completes with either success or failure
+                        yield self.txn.event.wait()
+                        status = self.txn.status
 
-                  app_log.debug("PUT operation result: %s", result)
-                  if self.successful_transaction(result):
-                      self.set_status(httplib.OK)
+                    # complete transaction
+                    self.transaction_complete(status)
 
-            except ValueError, e:
+            except APIException as e:
+                self.on_exception(e)
+
+            except ValueError as e:
                 self.set_status(httplib.BAD_REQUEST)
                 self.set_header(HTTP_HEADER_CONTENT_TYPE,
                                 HTTP_CONTENT_TYPE_JSON)
-                self.write(to_json_error(e))
+                self.write(utils.to_json_error(e))
 
-            # TODO: Improve exception handler
-            except Exception, e:
-                app_log.debug("Unexpected exception: %s", e)
-
-                self.txn.abort()
-                self.set_status(httplib.INTERNAL_SERVER_ERROR)
+            except Exception as e:
+                self.on_exception(e)
 
         else:
             self.set_status(httplib.LENGTH_REQUIRED)
@@ -303,61 +308,71 @@ class AutoHandler(BaseHandler):
             if proceed:
                 self.txn = self.ref_object.manager.get_new_transaction()
 
-                result = delete.delete_resource(self.resource_path, self.schema,
-                                                self.txn, self.idl)
-
-                if result == INCOMPLETE:
+                result = delete.delete_resource(self.resource_path,
+                                                self.schema, self.txn,
+                                                self.idl)
+                status = result.status
+                if status == INCOMPLETE:
                     self.ref_object.manager.monitor_transaction(self.txn)
                     # on 'incomplete' state we wait until the transaction
                     # completes with either success or failure
                     yield self.txn.event.wait()
-                    result = self.txn.status
+                    status = self.txn.status
 
-                app_log.debug("DELETE operation result: %s", result)
-                if self.successful_transaction(result):
-                    app_log.debug("Successful transaction!")
-                    self.set_status(httplib.NO_CONTENT)
+            # complete transaction
+            self.transaction_complete(status)
 
-        except Exception, e:
-            if isinstance(e.message, dict):
-                self.set_status(e.message.get('status',
-                                              httplib.INTERNAL_SERVER_ERROR))
-            else:
-                app_log.debug("Unexpected exception: %s", e.message)
-                self.set_status(httplib.INTERNAL_SERVER_ERROR)
+        except APIException as e:
+            self.on_exception(e)
 
-            self.txn.abort()
+        except Exception as e:
+            self.on_exception(e)
 
         self.finish()
 
-    def successful_transaction(self, result):
+    def transaction_complete(self, status):
 
-        if result == SUCCESS or result == UNCHANGED:
-            return True
+        # TODO: The http status codes are currently
+        # not in accordance with REST good practices.
 
-        self.txn.abort()
+        app_log.debug("Transaction result: %s", status)
 
-        if result == ERROR:
-            self.set_status(httplib.BAD_REQUEST)
-            self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
-            self.write(to_json_error(self.txn.get_db_error_msg()))
+        method = self.request.method
+        if status == SUCCESS:
+            if method == 'POST':
+                self.set_status(httplib.CREATED)
+            elif method == 'PUT':
+                self.set_status(httplib.OK)
+            elif method == 'DELETE':
+                self.set_status(httplib.NO_CONTENT)
 
-        elif ERROR in result:
-            self.set_status(httplib.BAD_REQUEST)
-            self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
-            self.write(to_json(result))
+        elif status == UNCHANGED:
+            self.set_status(httplib.OK)
 
         else:
-            self.set_status(httplib.INTERNAL_SERVER_ERROR)
-
-        return False
+            error = self.txn.get_error()
+            raise APIException(error)
 
     def successful_query(self, result):
 
         if isinstance(result, dict) and ERROR in result:
             self.set_status(httplib.BAD_REQUEST)
             self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
-            self.write(to_json(result))
+            self.write(utils.to_json(result))
             return False
         else:
             return True
+
+    def on_exception(self, e):
+
+        app_log.debug(e)
+        self.txn.abort()
+
+        # uncaught exceptions
+        if not isinstance(e, APIException):
+            self.set_status = httplib.INTERNAL_SERVER_ERROR
+        else:
+            self.set_status(e.status_code)
+
+        self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
+        self.write(str(e))

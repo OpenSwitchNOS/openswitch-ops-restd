@@ -23,6 +23,7 @@ import urllib
 
 from opsrest.resource import Resource
 from opsrest.constants import *
+from opsvalidator import validator
 from tornado.log import app_log
 
 
@@ -54,6 +55,7 @@ def get_row_from_resource(resource, idl):
             for row in rows:
                 rowlist.append(idl.tables[resource.table].rows[row])
             return rowlist
+
 
 def get_column_data_from_resource(resource, idl):
     """
@@ -268,6 +270,9 @@ def setup_new_row(resource, data, schema, txn, idl):
         return None
     row = txn.insert(idl.tables[resource.table])
 
+    # Update the resource's row info
+    resource.row = row.uuid
+
     # add config items
     config_keys = schema.ovs_tables[resource.table].config
     set_config_fields(row, data, config_keys)
@@ -378,7 +383,7 @@ def get_empty_by_basic_type(data):
         return 0
 
     elif type_ in ovs_types.RealType.python_types or \
-    type_ is ovs_types.RealType:
+            type_ is ovs_types.RealType:
         return 0.0
 
     elif type_ is types.BooleanType or \
@@ -529,8 +534,8 @@ def kv_index_to_row(index_values, parent, idl):
     """
     This subroutine fetches the row reference using the index as key.
     Current feature uses a single index and not a combination of multiple
-    indices. This is used for the new key/uuid type forward references introduced
-    for BGP
+    indices. This is used for the new key/uuid type forward references
+    introduced for BGP
     """
     index = index_values[0]
     column = parent.column
@@ -577,7 +582,7 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
                                 index = str(row.uuid)
                                 break
                     elif isinstance(column_data, types.DictType):
-                        for key,value in column_data.iteritems():
+                        for key, value in column_data.iteritems():
                             if value == row:
                                 # found the index
                                 index = key
@@ -595,7 +600,8 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
 
     return index
 
-
+'''
+# Old code
 def escaped_split(s_in):
     strings = re.split(r'(?<!\\)/', s_in)
     res_strings = []
@@ -605,6 +611,13 @@ def escaped_split(s_in):
         res_strings.append(s)
 
     return res_strings
+'''
+
+
+def escaped_split(s_in):
+    s_in = s_in.split('/')
+    s_in = [urllib.unquote(i) for i in s_in if i != '']
+    return s_in
 
 
 def get_reference_parent_uri(table_name, row, schema, idl):
@@ -695,3 +708,22 @@ def get_table_key(row, table_name, schema, idl):
             key_list.append(value)
 
     return key_list
+
+
+def exec_validators_with_resource(idl, schema, resource, http_method):
+    p_table_name = None
+    p_row = None
+    child_resource = resource
+
+    # Set parent info if a child exists
+    if resource.next is not None:
+        p_table_name = resource.table
+        p_row = idl.tables[p_table_name].rows[resource.row]
+
+        child_resource = resource.next
+
+    table_name = child_resource.table
+    row = idl.tables[table_name].rows[child_resource.row]
+
+    validator.exec_validators(idl, schema, table_name, row, http_method,
+                              p_table_name, p_row)
