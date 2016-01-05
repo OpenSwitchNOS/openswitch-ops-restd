@@ -25,7 +25,11 @@
                     "minLength": 1,
                     "description": "Unix user password"
                 }
-            }
+            },
+            "required": [
+                "username",
+                "password"
+            ]
         }
     }
 }
