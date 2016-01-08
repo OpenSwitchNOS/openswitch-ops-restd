@@ -78,7 +78,9 @@ def patch_resource(data, resource, schema, txn, idl, uri):
         app_log.debug("New row -> %s" % new_row_json)
 
         # Update resource with the patched JSON
-        if True:  # resource.relation is not None:
+        # System: resource.next is None
+        # All other rows: resource.relation is not None
+        if resource.next is None or resource.relation is not None:
             app_log.debug("Updating row...")
             # updated_row is not used for now but eventually will be returned
             updated_row = utils.update_row(resource_update, new_row_json,
