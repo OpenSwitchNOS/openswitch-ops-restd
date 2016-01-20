@@ -27,6 +27,11 @@ class LoginHandler(base.BaseHandler):
     def initialize(self, ref_object):
         pass
 
+    # Overwrite BaseHandler's prepare, as LoginHandler does not
+    # require authentication check prior to other operations
+    def prepare(self):
+        pass
+
     @gen.coroutine
     def get(self):
 
