@@ -17,13 +17,11 @@
 import json
 import httplib
 import re
-import userauth
 from tornado import gen
 from tornado.log import app_log
 
 # Local imports
 from opsrest.handlers.base import BaseHandler
-from opsrest.settings import settings
 from opsrest.utils.utils import to_json
 from opsrest.utils.utils import to_json_error
 from opsrest.constants import\
@@ -42,22 +40,12 @@ class CustomRESTHandler(BaseHandler):
 
     # Parse the url and http params.
     def prepare(self):
-        app_log.debug("Incoming request from %s: %s",
-                      self.request.remote_ip,
-                      self.request)
 
-        if settings['auth_enabled'] and self.request.method != "OPTIONS":
-            is_authenticated = userauth.is_user_authenticated(self)
-        else:
-            is_authenticated = True
+        # Call parent's prepare to check authentication
+        super(CustomRESTHandler, self).prepare()
 
-        if not is_authenticated:
-            self.set_status(httplib.UNAUTHORIZED)
-            self.set_header("Link", "/login")
-            self.finish()
-        else:
-            self.current_user = {}
-            self.current_user["username"] = self.get_current_user()
+        self.current_user = {}
+        self.current_user["username"] = self.get_current_user()
 
     def on_finish(self):
         app_log.debug("Finished handling of request from %s",
@@ -78,7 +66,8 @@ class CustomRESTHandler(BaseHandler):
                 self.set_status(httplib.NOT_FOUND)
             elif self.successful_request(result):
                 self.set_status(httplib.OK)
-                self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
+                self.set_header(HTTP_HEADER_CONTENT_TYPE,
+                                HTTP_CONTENT_TYPE_JSON)
                 self.write(json.dumps(result))
         except Exception, e:
                 app_log.debug("Unexpected exception: %s", e)

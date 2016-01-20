@@ -14,9 +14,14 @@
 
 import re
 import userauth
+import httplib
 
 from tornado import web
 from opsrest.constants import *
+from opsrest.exceptions import APIException
+from opsrest.settings import settings
+
+from tornado.log import app_log
 
 
 class BaseHandler(web.RequestHandler):
@@ -36,15 +41,46 @@ class BaseHandler(web.RequestHandler):
         self.set_header("Cache-control", "no-cache")
         self.set_header("Access-Control-Allow-Origin", allow_origin)
         self.set_header("Access-Control-Allow-Credentials", "true")
-        self.set_header("Access-Control-Expose-Headers", "Date,%s" % \
+        self.set_header("Access-Control-Expose-Headers", "Date,%s" %
                         HTTP_HEADER_ETAG)
-        self.set_header("Access-Control-Request-Headers", \
-                       HTTP_HEADER_CONDITIONAL_IF_MATCH)
+        self.set_header("Access-Control-Request-Headers",
+                        HTTP_HEADER_CONDITIONAL_IF_MATCH)
 
         # TODO - remove next line before release - needed for testing
         if HTTP_HEADER_ORIGIN in self.request.headers:
             self.set_header("Access-Control-Allow-Origin",
                             self.request.headers[HTTP_HEADER_ORIGIN])
 
+    def prepare(self):
+
+        app_log.debug("Incoming request from %s: %s",
+                      self.request.remote_ip,
+                      self.request)
+
+        if settings['auth_enabled'] and self.request.method != "OPTIONS":
+            is_authenticated = userauth.is_user_authenticated(self)
+        else:
+            is_authenticated = True
+
+        if not is_authenticated:
+            self.set_status(httplib.UNAUTHORIZED)
+            self.set_header("Link", "/login")
+            self.finish()
+
     def get_current_user(self):
         return userauth.get_request_user(self)
+
+    def on_exception(self, e):
+
+        app_log.debug(e)
+        if self.txn is not None:
+            self.txn.abort()
+
+        # uncaught exceptions
+        if not isinstance(e, APIException):
+            self.set_status(httplib.INTERNAL_SERVER_ERROR)
+        else:
+            self.set_status(e.status_code)
+
+        self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
+        self.write(str(e))

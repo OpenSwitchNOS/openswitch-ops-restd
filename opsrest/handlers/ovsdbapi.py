@@ -18,14 +18,12 @@ from tornado.log import app_log
 import json
 import httplib
 import hashlib
-import userauth
 
 from opsrest.handlers import base
 from opsrest.parse import parse_url_path
 from opsrest.utils import utils
-from opsrest.settings import settings
 from opsrest.constants import *
-from opsrest.exceptions import *
+from opsrest.exceptions import APIException
 
 from opsrest import get, post, delete, put
 
@@ -35,33 +33,22 @@ class OVSDBAPIHandler(base.BaseHandler):
     # parse the url and http params.
     def prepare(self):
 
-        app_log.debug("Incoming request from %s: %s",
-                      self.request.remote_ip,
-                      self.request)
+        # Call parent's prepare to check authentication
+        super(OVSDBAPIHandler, self).prepare()
 
-        if settings['auth_enabled'] and self.request.method != "OPTIONS":
-            is_authenticated = userauth.is_user_authenticated(self)
-        else:
-            is_authenticated = True
+        self.resource_path = parse_url_path(self.request.path,
+                                            self.schema,
+                                            self.idl,
+                                            self.request.method)
 
-        if not is_authenticated:
-            self.set_status(httplib.UNAUTHORIZED)
-            self.set_header("Link", "/login")
+        if self.resource_path is None:
+            self.set_status(httplib.NOT_FOUND)
             self.finish()
         else:
-            self.resource_path = parse_url_path(self.request.path,
-                                                self.schema,
-                                                self.idl,
-                                                self.request.method)
-
-            if self.resource_path is None:
-                self.set_status(httplib.NOT_FOUND)
+            # If Match support
+            match = self.process_if_match()
+            if not match:
                 self.finish()
-            else:
-                #If Match support
-                match = self.process_if_match()
-                if not match:
-                    self.finish()
 
     def on_finish(self):
         app_log.debug("Finished handling of request from %s",
@@ -104,7 +91,7 @@ class OVSDBAPIHandler(base.BaseHandler):
                     data = json.loads(self.request.body)
                     if OVSDB_SCHEMA_CONFIG in data and \
                         data[OVSDB_SCHEMA_CONFIG] == \
-                        result[OVSDB_SCHEMA_CONFIG]:
+                            result[OVSDB_SCHEMA_CONFIG]:
                             # Set PUT Successful code and finish
                             self.set_status(httplib.OK)
                             return False
@@ -302,17 +289,3 @@ class OVSDBAPIHandler(base.BaseHandler):
             return False
         else:
             return True
-
-    def on_exception(self, e):
-
-        app_log.debug(e)
-        self.txn.abort()
-
-        # uncaught exceptions
-        if not isinstance(e, APIException):
-            self.set_status(httplib.INTERNAL_SERVER_ERROR)
-        else:
-            self.set_status(e.status_code)
-
-        self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
-        self.write(str(e))
