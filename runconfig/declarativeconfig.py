@@ -10,12 +10,6 @@ import urllib
 import types
 
 
-# Immutable tables cannot have any additions or deletions
-# TODO : Will be removing this array after adding the check for
-# immutable tables as done in verify.py for POST/DELETE check
-immutable_tables = ['Fan', 'Power_supply', 'LED', 'Temp_sensor',
-                    'System', 'Subsystem', 'VRF', 'Daemon']
-
 # READ CONFIG
 
 
@@ -200,7 +194,7 @@ def setup_row(index_values, table, row_data, txn, reflist, schema, idl,
 
     # Create a new row if not found in DB
     if row is None:
-        if table in immutable_tables:
+        if not schema.ovs_tables[table].mutable:
             # Do NOT add row in Immutable table_data
             return (None, False)
         row = txn.insert(idl.tables[table])
@@ -255,7 +249,7 @@ def setup_row(index_values, table, row_data, txn, reflist, schema, idl,
             if key in references else key
 
         # Check if table is immutable
-        if child_table in immutable_tables:
+        if not schema.ovs_tables[child_table].mutable:
             if not is_new and (key not in row_data or not row_data[key]):
                 # Deep clean-up children, even if missing or empty,
                 # Ignore if immutable
@@ -354,7 +348,7 @@ def setup_row(index_values, table, row_data, txn, reflist, schema, idl,
                         # Save this in global reflist
                         reflist[(child_table, child_index)] = (child_row,
                                                                is_child_new)
-                if child_table not in immutable_tables:
+                if schema.ovs_tables[child_table].mutable:
                     row.__setattr__(key, child_reference_list)
             else:
                 # backward referenced children
@@ -404,7 +398,7 @@ def clean_subtree(table, entries, txn, schema, idl, validator_adapter,
             clean_row(table, row, txn, schema, idl, validator_adapter)
     else:
         # Backward references
-        if table not in immutable_tables:
+        if schema.ovs_tables[table].mutable:
             remove_deleted_rows(table, {}, txn, schema, idl, validator_adapter,
                                 parent)
         else:
@@ -430,7 +424,7 @@ def clean_row(table, row, txn, schema, idl, validator_adapter):
         if key in references:
             kv_type = references[key].kv_type
             child_table = references[key].ref_table
-            if child_table not in immutable_tables:
+            if schema.ovs_tables[child_table].mutable:
                 if kv_type:
                     row.__setattr__(key, {})
                 else:
@@ -618,7 +612,7 @@ def write_config_to_db(schema, idl, data):
         else:
             new_data = data[table_name]
 
-        if table_name not in immutable_tables:
+        if schema.ovs_tables[table_name].mutable:
             remove_deleted_rows(table_name, new_data, txn, schema, idl,
                                 validator_adapter)
 
