@@ -240,6 +240,18 @@ def verify_config_data(data, table_name, schema, request_type,
     non_mutable_attributes = get_non_mutable_attributes(table_name,
                                                         schema)
 
+    # non-mutable attributes cannot be updated
+    if request_type == REQUEST_TYPE_UPDATE:
+        non_mutable_data = []
+        for item in non_mutable_attributes:
+            if item in data:
+                non_mutable_data.append(item)
+        if non_mutable_data:
+            app_log.debug('attempting to update non-mutable attributes')
+            error = "Updating non-mutable attribute(s) %s is not allowed"\
+                    %non_mutable_data
+            raise DataValidationFailed(error)
+
     # Check for all required/valid attributes to be present
     for column_name in config_keys:
         is_optional = config_keys[column_name].is_optional
@@ -262,16 +274,8 @@ def verify_config_data(data, table_name, schema, request_type,
                 if column_name not in non_mutable_attributes:
                     verified_config_data[column_name] = data[column_name]
         else:
-            # PUT ignores immutable attributes, otherwise they are required.
-            # If it's a PUT request, and the field is a mutable and mandatory,
-            # but not found, then it's an error.
-            #
             # POST requires all attributes. If it's a mandatory field not found
             # then it's an error.
-            if request_type == REQUEST_TYPE_UPDATE \
-                    and column_name in non_mutable_attributes:
-                continue
-
             if not is_optional:
                 error = "Attribute %s is required" % column_name
                 if get_all_errors:
