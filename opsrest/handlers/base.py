@@ -22,6 +22,7 @@ from tornado import web
 from opsrest.constants import *
 from opsrest.exceptions import APIException, TransactionFailed
 from opsrest.settings import settings
+from opsrest.utils.getutils import get_query_arg
 
 from tornado.log import app_log
 
@@ -67,6 +68,14 @@ class BaseHandler(web.RequestHandler):
         if not is_authenticated:
             self.set_status(httplib.UNAUTHORIZED)
             self.set_header("Link", "/login")
+            self.finish()
+
+        depth = get_query_arg(REST_QUERY_PARAM_DEPTH,
+                              self.request.query_arguments)
+        if self.request.method != REQUEST_TYPE_READ and depth is not None:
+            self.set_status(httplib.BAD_REQUEST)
+            self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
+            self.write("depth is only allowed in %s" % REQUEST_TYPE_READ)
             self.finish()
 
     def get_current_user(self):
