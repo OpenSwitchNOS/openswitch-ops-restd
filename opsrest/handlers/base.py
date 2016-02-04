@@ -22,6 +22,7 @@ from tornado import web
 from opsrest.constants import *
 from opsrest.exceptions import APIException, TransactionFailed
 from opsrest.settings import settings
+from opsrest.utils.auditlog_utils import audit_log_user_msg
 
 from tornado.log import app_log
 
@@ -164,3 +165,25 @@ class BaseHandler(web.RequestHandler):
                 return False
         # Etag matches
         return True
+
+    def on_finish(self):
+        app_log.debug("Finished handling of request from %s",
+                      self.request.remote_ip)
+        # AuditLog call
+        op = self.request.method
+        path = self.request.path
+
+        if op in AUDIT_LOG_ACCEPTED_REQUESTS:
+            result = 0
+            cfgdata = self.request.body
+            if 'username' in self.request.arguments and path == REST_LOGIN_PATH:
+                user = self.request.arguments['username'][0]
+            elif self.get_secure_cookie("user"):
+                user = self.current_user['username']
+            else:
+                user = 'nobody'
+            hostname = self.request.host
+            addr = self.request.remote_ip
+            if self.get_status() in HTTP_SUCCESSFUL_STATUS_CODES:
+                result = 1
+            audit_log_user_msg(op, cfgdata, user, hostname, addr, result)
