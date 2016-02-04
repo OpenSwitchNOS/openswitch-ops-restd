@@ -101,7 +101,7 @@ class BaseHandler(web.RequestHandler):
             self.set_status(e.status_code)
 
         self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
-        self.write(str(e))
+        self.write("{\"message\": %s}" % str(e))
 
     def compute_etag(self, data=None):
         if data is None:
