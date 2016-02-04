@@ -31,6 +31,7 @@ ERROR = Transaction.ERROR
 
 # REST URIs
 REST_VERSION_PATH = '/rest/v1/'
+REST_LOGIN_PATH = '/login'
 REST_QUERY_PARAM_SELECTOR = 'selector'
 
 REST_QUERY_PARAM_SORTING = 'sort'
@@ -68,6 +69,12 @@ HTTP_HEADER_ETAG = 'Etag'
 
 # HTTP Content Types
 HTTP_CONTENT_TYPE_JSON = 'application/json; charset=UTF-8'
+
+# HTTP Status Code
+HTTP_SUCCESSFUL_STATUS_CODES = {200, 201, 202, 203, 204, 205, 206, 207, 226}
+
+# Audit Log for Configuration changes only
+AUDIT_LOG_ACCEPTED_REQUEST = {'POST', 'PUT', 'DELETE', 'PATCH'}
 
 # User Management
 DEFAULT_USER_GRP = "ovsdb_users"
