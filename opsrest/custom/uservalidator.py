@@ -75,7 +75,7 @@ class UserValidator():
         """
         Validates required fields, username, verifies if the user
         exists, verifies that the user is not root and that belongs to
-        ovsdb_user group
+        ovsdb-client group
         Returns None when valid else returns error json dict
         """
         self.__validate_required_fields__(user, REQUEST_TYPE_UPDATE)
@@ -97,8 +97,8 @@ class UserValidator():
         This functions verifies the following:
         User is not root
         User is not the current user
-        User belongs to ovsdb_user group
-        User is not the last user at ovsdb_group
+        User belongs to ovsdb-client group
+        User is not the last user in the ovsdb-client group
         Returns None when valid else returns error json dict
         """
         if self.check_user_exists(username):
@@ -112,7 +112,7 @@ class UserValidator():
                 error = "Permission denied. Cannot remove the current user."
                 raise DataValidationFailed(error)
 
-            # Check if deleting the last user from that group
+            # Check if deleting the last user from the ovsdb-client group
             if userutils.get_group_user_count(DEFAULT_USER_GRP) <= 1:
                 error = "Cannot delete the last user %s" % username
                 raise DataValidationFailed(error)

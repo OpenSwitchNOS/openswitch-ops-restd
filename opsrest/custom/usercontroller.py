@@ -34,8 +34,8 @@ from opsrest.custom.uservalidator import UserValidator
 from opsrest.utils import getutils
 from opsrest.constants import\
     REQUEST_TYPE_CREATE, REQUEST_TYPE_UPDATE,\
-    OVSDB_SCHEMA_CONFIG, DEFAULT_USER_GRP, ERROR, \
-    REST_QUERY_PARAM_OFFSET, REST_QUERY_PARAM_LIMIT
+    OVSDB_SCHEMA_CONFIG, DEFAULT_USER_GRP, DEFAULT_DB_GRP, \
+    ERROR, REST_QUERY_PARAM_OFFSET, REST_QUERY_PARAM_LIMIT
 
 
 class UserController(BaseController):
@@ -74,7 +74,7 @@ class UserController(BaseController):
 
     def __call_user_add__(self, username):
         cmd_result = call(["sudo", "useradd", username,
-                           "-g", DEFAULT_USER_GRP])
+                           "-g", DEFAULT_USER_GRP, "-G", DEFAULT_DB_GRP])
         return cmd_result
 
     def __call_user_mod__(self, username, encoded_password):
@@ -88,7 +88,7 @@ class UserController(BaseController):
 
     def create(self, data, current_user):
         """
-        Create user at ovsdb_users group
+        Create user with the ovsdb-client group
         Returns result dictionary
         """
         # Validate json
@@ -133,7 +133,7 @@ class UserController(BaseController):
 
     def update(self, item_id, data, current_user):
         """
-        Update user from ovsdb_users group
+        Update user from ovsdb-client group
         Returns result dictionary
         """
         # Validate json
@@ -158,7 +158,7 @@ class UserController(BaseController):
 
     def delete(self, item_id, current_user):
         """
-        Delete user from ovsdb_users group
+        Delete user from ovsdb-client group
         Returns result dictionary
         """
         username = item_id
@@ -177,7 +177,7 @@ class UserController(BaseController):
 
     def get(self, item_id, current_user=None, selector=None, query_args=None):
         """
-        Retrieve an specific user from ovsdb_users group
+        Retrieve an specific user from ovsdb-client group
         Return user json representation
         """
         username = item_id
@@ -192,7 +192,7 @@ class UserController(BaseController):
 
     def get_all(self, current_user, selector=None, query_args=None):
         """
-        Retrieve all users from ovsdb_users group
+        Retrieve all users from ovsdb-client group
         Return users dictionary list
         """
 
@@ -230,7 +230,7 @@ class UserController(BaseController):
         app_log.debug("Limit % s" % limit)
         app_log.debug("Offset % s" % offset)
 
-        group_id = userutils.get_group_id(DEFAULT_USER_GRP)
+        group_id = userutils.get_group_id(DEFAULT_DB_GRP)
         all_users = []
         users = pwd.getpwall()
         for user_data in users:
