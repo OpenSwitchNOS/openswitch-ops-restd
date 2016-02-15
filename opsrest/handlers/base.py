@@ -73,8 +73,11 @@ class BaseHandler(web.RequestHandler):
 
             depth = get_query_arg(REST_QUERY_PARAM_DEPTH,
                                   self.request.query_arguments)
-            if self.request.method != REQUEST_TYPE_READ and depth is not None:
-                raise ParameterNotAllowed("depth is only allowed in %s" %
+            columns = get_query_arg(REST_QUERY_PARAM_COLUMNS,
+                                    self.request.query_arguments)
+            if self.request.method != REQUEST_TYPE_READ \
+               and (depth is not None or columns is not None):
+                raise ParameterNotAllowed("arguments are only allowed in %s" %
                                           REQUEST_TYPE_READ)
 
         except APIException as e:
