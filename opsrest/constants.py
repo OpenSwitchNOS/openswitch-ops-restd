@@ -71,7 +71,6 @@ HTTP_HEADER_ETAG = 'Etag'
 HTTP_CONTENT_TYPE_JSON = 'application/json; charset=UTF-8'
 
 # User Management
-DEFAULT_USER_GRP = "ovsdb_users"
 USER_KEY_NAME = 'username'
 
 # HTTP Request Types
