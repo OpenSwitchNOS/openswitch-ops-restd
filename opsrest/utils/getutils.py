@@ -493,21 +493,22 @@ def sort_get_results(get_data, sort_by_columns, reverse_=False):
     return sorted_data
 
 
-def paginate_get_results(get_data, offset=None, limit=None):
+def paginate_get_results(get_data, offset=None, limit=None, log=None):
 
     data_length = len(get_data)
 
-    if offset is None:
-        if limit is None:
-            return get_data
-        else:
-            offset = 0
-
     # limit is exclusive
-    if limit is None:
-        limit = data_length
-    else:
-        limit = offset + limit
+    if log is None:
+        if offset is None:
+            if limit is None:
+                return get_data
+            else:
+                offset = 0
+
+        if limit is None:
+            limit = data_length
+        else:
+            limit = offset + limit
 
     error_json = {}
     if offset < 0 or offset > data_length:
