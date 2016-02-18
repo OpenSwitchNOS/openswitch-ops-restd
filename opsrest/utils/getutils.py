@@ -497,13 +497,13 @@ def paginate_get_results(get_data, offset=None, limit=None):
 
     data_length = len(get_data)
 
+    # limit is exclusive
     if offset is None:
         if limit is None:
             return get_data
         else:
             offset = 0
 
-    # limit is exclusive
     if limit is None:
         limit = data_length
     else:
