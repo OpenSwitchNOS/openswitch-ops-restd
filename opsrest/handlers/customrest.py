@@ -63,6 +63,7 @@ class CustomRESTHandler(BaseHandler):
             selector = self.get_query_argument(REST_QUERY_PARAM_SELECTOR, None)
             query_args = self.request.query_arguments
             result = None
+            app_log.debug("$$ custom get resource %s" % resource_id)
             if resource_id:
                 result = self.controller.get(resource_id, self.current_user,
                                              selector, query_args)
@@ -73,7 +74,7 @@ class CustomRESTHandler(BaseHandler):
                 self.set_status(httplib.OK)
                 self.set_header(HTTP_HEADER_CONTENT_TYPE,
                                 HTTP_CONTENT_TYPE_JSON)
-                self.write(json.dumps(result))
+                self.write(result)  #(json.dumps(result))
         except APIException as e:
             self.on_exception(e)
         except Exception, e:
