@@ -73,7 +73,11 @@ class CustomRESTHandler(BaseHandler):
                 self.set_status(httplib.OK)
                 self.set_header(HTTP_HEADER_CONTENT_TYPE,
                                 HTTP_CONTENT_TYPE_JSON)
-                self.write(json.dumps(result))
+
+                if type(result) is dict:
+                    self.write(json.dumps(result))
+                else:
+                    self.write(result)
         except APIException as e:
             self.on_exception(e)
         except Exception, e:
