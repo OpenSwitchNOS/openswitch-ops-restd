@@ -182,14 +182,16 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
     references = schema_table.references
     reference_data = []
     for key in references:
-        # Don't consider back references
-        if references[key].ref_table != schema_table.parent:
-            if (depth_counter >= depth):
-                depth = 0
+        # ignore parent column in case of back references
+        if references[key].ref_table == schema_table.parent:
+            continue
+
+        if (depth_counter >= depth):
+            depth = 0
 
         temp = get_column_json(key, row, table, schema,
-               idl, uri, selector, depth,
-               depth_counter)
+                idl, uri, selector, depth,
+                depth_counter)
 
         # The condition below is used to discard the empty list of references
         # in the data returned for get requests
@@ -338,7 +340,7 @@ def get_back_references_json(parent_row, parent_table, table,
         for row in idl.tables[table].rows.itervalues():
             ref = row.__getattr__(_refCol)
             if ref.uuid == parent_row:
-                tmp = utils.get_table_key(row, table, schema, idl)
+                tmp = utils.get_table_key(row, table, schema, idl, False)
                 _uri = _create_uri(uri, tmp)
                 resources_list.append(_uri)
     else:

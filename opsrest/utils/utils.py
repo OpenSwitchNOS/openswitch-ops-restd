@@ -649,14 +649,14 @@ def get_parent_trace(table_name, row, schema, idl):
     return path
 
 
-def get_parent_column_ref(table_name, table_ref, schema):
+def get_parent_column_ref(table_name, table_ref, schema, relation="child"):
     """
     Get column name where the child table is being referenced
     Returns column name
     """
     table = schema.ovs_tables[table_name]
     for column_name, reference in table.references.iteritems():
-        if reference.ref_table == table_ref and reference.relation == 'child':
+        if reference.ref_table == table_ref and reference.relation == relation:
             return column_name
 
 
@@ -689,12 +689,21 @@ def get_table_key(row, table_name, schema, idl):
 
     # Verify if is kv reference
     if table.parent:
-        parent_table = schema.ovs_tables[table.parent]
-        column_ref = get_parent_column_ref(parent_table.name, table.name,
-                                           schema)
-        if parent_table.references[column_ref].kv_type:
-            parent_row, key = get_parent_row(parent_table.name,
-                                             row, column_ref, schema, idl)
+        if forward_ref:
+            cur_table_name = table.parent
+            table_ref = table_name
+            relation = "child"
+        else:
+            cur_table_name = table_name
+            table_ref = table.parent
+            relation = "parent"
+
+        column_ref = get_parent_column_ref(cur_table_name, table_ref,
+                                           schema, relation)
+        cur_table = schema.ovs_tables[cur_table_name]
+        if cur_table.references[column_ref].kv_type:
+            parent_row, key = get_parent_row(cur_table_name,
+                                            row, column_ref, schema, idl)
             key_list.append(str(key))
             return key_list
 
