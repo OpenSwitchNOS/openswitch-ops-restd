@@ -256,6 +256,14 @@ def genGetParams(table, is_instance=False):
         param["type"] = "integer"
         params.append(param)
 
+        param = {}
+        param["name"] = "columns"
+        param["in"] = "query"
+        param["description"] = "columns from the result list to be returned"
+        param["required"] = False
+        param["type"] = "string"
+        params.append(param)
+
         columns = {}
         columns.update(table.config)
         columns.update(table.stats)
