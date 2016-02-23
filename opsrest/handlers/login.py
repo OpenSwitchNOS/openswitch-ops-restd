@@ -19,6 +19,8 @@ import httplib
 import userauth
 
 from opsrest.handlers import base
+from opsrest.custom.accountvalidator import AccountValidator
+from opsrest.exceptions import APIException, NotAuthenticated
 
 
 class LoginHandler(base.BaseHandler):
@@ -34,28 +36,46 @@ class LoginHandler(base.BaseHandler):
 
     @gen.coroutine
     def get(self):
+        try:
+            app_log.debug("Executing Login GET...")
 
-        app_log.debug("Executing Login GET...")
+            is_authenticated = userauth.is_user_authenticated(self)
+            if not is_authenticated:
+                self.set_header("Link", "/login")
+                raise NotAuthenticated
+            else:
+                self.set_status(httplib.OK)
 
-        is_authenticated = userauth.is_user_authenticated(self)
-        if not is_authenticated:
-            self.set_status(httplib.UNAUTHORIZED)
-            self.set_header("Link", "/login")
-        else:
-            self.set_status(httplib.OK)
+        except APIException as e:
+            self.on_exception(e)
+
+        except Exception as e:
+            self.on_exception(e)
 
         self.finish()
 
     @gen.coroutine
     def post(self):
+        try:
+            app_log.debug("Executing Login POST...")
 
-        app_log.debug("Executing Login POST...")
+            username = self.get_argument("username")
 
-        login_success = userauth.handle_user_login(self)
-        if not login_success:
-            self.set_status(httplib.UNAUTHORIZED)
-            self.set_header("Link", "/login")
-        else:
-            self.set_status(httplib.OK)
+            if not AccountValidator.check_user_exists(username):
+                self.set_header("Link", "/login")
+                raise NotAuthenticated
+
+            login_success = userauth.handle_user_login(self)
+            if not login_success:
+                self.set_header("Link", "/login")
+                raise NotAuthenticated
+            else:
+                self.set_status(httplib.OK)
+
+        except APIException as e:
+            self.on_exception(e)
+
+        except Exception as e:
+            self.on_exception(e)
 
         self.finish()
