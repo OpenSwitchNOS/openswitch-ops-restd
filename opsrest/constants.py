@@ -71,8 +71,9 @@ HTTP_HEADER_ETAG = 'Etag'
 # HTTP Content Types
 HTTP_CONTENT_TYPE_JSON = 'application/json; charset=UTF-8'
 
-# User Management
+# RBAC
 DEFAULT_USER_GRP = "ops_netop"
+ALLOWED_LOGIN_GRPS = [DEFAULT_USER_GRP]
 USERNAME_KEY = 'username'
 OLD_PASSWORD_KEY = 'password'
 NEW_PASSWORD_KEY = 'new_password'
