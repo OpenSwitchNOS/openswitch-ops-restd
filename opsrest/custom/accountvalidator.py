@@ -17,7 +17,7 @@ from tornado.log import app_log
 
 # Local imports
 import opsrest.utils.userutils as userutils
-from opsrest.constants import DEFAULT_USER_GRP, \
+from opsrest.constants import ALLOWED_LOGIN_GRPS, \
     OLD_PASSWORD_KEY, NEW_PASSWORD_KEY
 from opsrest.exceptions import DataValidationFailed, NotFound
 
@@ -52,7 +52,7 @@ class AccountValidator():
 
         self.__validate_required_fields__(account_info)
 
-        if self.check_user_exists(username):
+        if self.validate_user(username):
             # Avoid update a root user
             if username == "root":
                 error = "Permission denied. Cannot update the root user."
@@ -61,8 +61,9 @@ class AccountValidator():
             raise NotFound("Username '%s' not found" % username)
 
     @staticmethod
-    def check_user_exists(username):
-        if username and userutils.user_exists(username) and \
-                userutils.check_user_group(username, DEFAULT_USER_GRP):
-            return True
+    def validate_user(username):
+        if username and userutils.user_exists(username):
+            for allowed_group in ALLOWED_LOGIN_GRPS:
+                if userutils.check_user_group(username, allowed_group):
+                    return True
         return False
