@@ -1,0 +1,8 @@
+Code-Review+2: Daniela Ramirez <daniela.rch@hpe.com>
+Verified+2: Ederick Colmenares Sanchez <ederick.colmenares.sanchez@hpe.com>
+Workflow+1: Ederick Colmenares Sanchez <ederick.colmenares.sanchez@hpe.com>
+Submitted-by: Ederick Colmenares Sanchez <ederick.colmenares.sanchez@hpe.com>
+Submitted-at: Wed, 24 Feb 2016 16:17:38 +0000
+Reviewed-on: https://review.openswitch.net/4456
+Project: openswitch/ops-restd
+Branch: refs/heads/feature/colretrieval
