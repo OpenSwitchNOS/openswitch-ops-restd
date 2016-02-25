@@ -337,7 +337,8 @@ class OVSTable(object):
             elif relationship == "reference":
                 table.references[column_name] = OVSReference(type_,
                                                              "reference",
-                                                             True, category)
+                                                             category=="configuration",
+                                                             category)
             elif category == "configuration":
                 table.config[column_name] = OVSColumn(table, column_name,
                                                       type_, is_optional,
