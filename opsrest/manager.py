@@ -35,6 +35,7 @@ class OvsdbConnectionManager:
         self.transactions = None
         self.curr_seqno = 0
         self.connected = False
+        self._change_callbacks = set()
 
     def start(self):
         try:
@@ -109,9 +110,13 @@ class OvsdbConnectionManager:
         elif events & IOLoop.READ:
             app_log.debug("Updating idl replica")
             self.idl.run()
-            if self.curr_seqno != self.idl.change_seqno and \
-               len(self.transactions.txn_list):
-                self.check_transactions()
+
+            if self.curr_seqno != self.idl.change_seqno:
+               self.run_change_callbacks()
+
+               if len(self.transactions.txn_list):
+                   self.check_transactions()
+
             self.curr_seqno = self.idl.change_seqno
 
     def check_transactions(self):
@@ -127,3 +132,16 @@ class OvsdbConnectionManager:
 
     def monitor_transaction(self, txn):
         self.transactions.add_txn(txn)
+
+    def add_change_callback(self, callback):
+        self._change_callbacks.add(callback)
+
+    def remove_change_callback(self, callback):
+        self._change_callbacks.discard(callback)
+
+    def run_change_callbacks(self):
+        for callback in self._change_callbacks:
+            callback(self.idl)
+
+        # Clear any change tracking info received for next notifications
+        self.idl.track_clear_all()
