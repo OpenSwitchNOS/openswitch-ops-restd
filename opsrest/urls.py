@@ -15,11 +15,11 @@
 from opsrest.handlers import login, ovsdbapi, config, customrest
 from custom import logcontroller
 from custom import accountcontroller
+from custom import configcontroller
 
 REGEX_RESOURCE_ID = '?(?P<resource_id>[A-Za-z0-9-_]+[$]?)?/?'
 
 url_patterns = [(r'/login', login.LoginHandler),
-                (r'/rest/v1/system/full-configuration', config.ConfigHandler),
                 (r'/.*', ovsdbapi.OVSDBAPIHandler),
                 ]
 
@@ -29,4 +29,7 @@ custom_url_patterns = [(r'/rest/v1/logs',
                        (r'/account',
                         customrest.CustomRESTHandler,
                         accountcontroller.AccountController),
+                       (r'/rest/v1/system/full-configuration',
+                        customrest.CustomRESTHandler,
+                        configcontroller.ConfigController)
                        ]
