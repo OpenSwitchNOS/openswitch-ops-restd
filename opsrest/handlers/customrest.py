@@ -18,7 +18,7 @@ import json
 import httplib
 import re
 from tornado import gen
-from tornado.log import app_log
+from tornado.concurrent import Future
 
 # Local imports
 from opsrest.handlers.base import BaseHandler
@@ -33,7 +33,8 @@ class CustomRESTHandler(BaseHandler):
 
     # Pass the application reference and controller reference to the handlers
     def initialize(self, ref_object, controller_class):
-        self.controller = controller_class()
+        self.ref_object = ref_object
+        self.controller = controller_class(ref_object)
         self.request.path = re.sub("/{2,}", "/", self.request.path).rstrip('/')
 
     # Parse the url and http params.
@@ -64,12 +65,17 @@ class CustomRESTHandler(BaseHandler):
             selector = self.get_query_argument(REST_QUERY_PARAM_SELECTOR, None)
             query_args = self.request.query_arguments
             result = None
+            waiter = Future()
             if resource_id:
-                result = self.controller.get(resource_id, self.current_user,
-                                             selector, query_args)
+                waiter.set_result(self.controller.get(resource_id,
+                                                      self.current_user,
+                                                      selector,
+                                                      query_args))
             else:
-                result = self.controller.get_all(self.current_user,
-                                                 selector, query_args)
+                waiter.set_result(self.controller.get_all(self.current_user,
+                                                          selector,
+                                                          query_args))
+            result = yield waiter
             if result is not None:
                 self.set_status(httplib.OK)
                 self.set_header(HTTP_HEADER_CONTENT_TYPE,
@@ -96,12 +102,16 @@ class CustomRESTHandler(BaseHandler):
                     data = json.loads(self.request.body)
             except:
                 raise ParseError("Malformed JSON request body")
-
-            result = self.controller.create(data, self.current_user)
-            self.set_status(httplib.CREATED)
+            query_args = self.request.query_arguments
+            waiter = Future()
+            waiter.set_result(self.controller.create(data,
+                                                     self.current_user,
+                                                     query_args))
+            result = yield waiter
             if result is not None:
                 new_uri = self.request.path + "/" + result["key"]
                 self.set_header("Location", new_uri)
+            self.set_status(httplib.CREATED)
 
         except APIException as e:
             self.on_exception(e)
@@ -122,9 +132,12 @@ class CustomRESTHandler(BaseHandler):
                 data = json.loads(self.request.body)
             except:
                 raise ParseError("Malformed JSON request body")
-
-            self.controller.update(resource_id, data,
-                                   self.current_user)
+            query_args = self.request.query_arguments
+            waiter = Future()
+            waiter.set_result(self.controller.update(resource_id, data,
+                                                     self.current_user,
+                                                     query_args))
+            yield waiter
             self.set_status(httplib.OK)
 
         except APIException as e:
@@ -146,8 +159,12 @@ class CustomRESTHandler(BaseHandler):
                 data = json.loads(self.request.body)
             except:
                 raise ParseError("Malformed JSON request body")
-
-            self.controller.patch(resource_id, data, self.current_user)
+            query_args = self.request.query_arguments
+            waiter = Future()
+            waiter.set_result(self.controller.patch(resource_id, data,
+                                                    self.current_user,
+                                                    query_args))
+            yield waiter
             self.set_status(httplib.NO_CONTENT)
 
         except APIException as e:
@@ -161,7 +178,12 @@ class CustomRESTHandler(BaseHandler):
     @gen.coroutine
     def delete(self, resource_id):
         try:
-            self.controller.delete(resource_id, self.current_user)
+            query_args = self.request.query_arguments
+            waiter = Future()
+            waiter.set_result(self.controller.delete(resource_id,
+                                                     self.current_user,
+                                                     query_args))
+            yield waiter
             self.set_status(httplib.NO_CONTENT)
 
         except APIException as e:
