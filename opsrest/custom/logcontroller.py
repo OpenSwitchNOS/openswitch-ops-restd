@@ -65,7 +65,7 @@ class LogController(BaseController):
                        LOGS_PAGINATION: [REST_QUERY_PARAM_OFFSET,
                                          REST_QUERY_PARAM_LIMIT]}
 
-    def __init_(self):
+    def initialize(self):
         self.base_uri_path = "logs"
 
     # This function is to validate the invalid keywords that can be used
