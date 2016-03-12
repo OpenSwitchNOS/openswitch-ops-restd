@@ -15,6 +15,7 @@
 
 # Third party imports
 from tornado.log import app_log
+from tornado import gen
 import subprocess
 import json
 import re
@@ -65,7 +66,7 @@ class LogController(BaseController):
                        LOGS_PAGINATION: [REST_QUERY_PARAM_OFFSET,
                                          REST_QUERY_PARAM_LIMIT]}
 
-    def __init_(self):
+    def initialize(self):
         self.base_uri_path = "logs"
 
     # This function is to validate the invalid keywords that can be used
@@ -194,6 +195,7 @@ class LogController(BaseController):
 
         return query_args
 
+    @gen.coroutine
     def get_all(self, current_user, selector=None, query_args=None):
         offset = None
         limit = None
