@@ -15,6 +15,7 @@
 from tornado import gen
 from tornado.log import app_log
 
+import re
 import httplib
 import userauth
 
@@ -33,7 +34,9 @@ class LoginHandler(base.BaseHandler):
     # Overwrite BaseHandler's prepare, as LoginHandler does not
     # require authentication check prior to other operations
     def prepare(self):
-        pass
+        if self.request.protocol == "http":
+                self.redirect(re.sub(r'^([^:]+)', 'https',
+                                     self.request.full_url()), True)
 
     @gen.coroutine
     def get(self):
