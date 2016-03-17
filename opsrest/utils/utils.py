@@ -736,3 +736,12 @@ def exec_validators_with_resource(idl, schema, resource, http_method):
 
     validator.exec_validators(idl, schema, table_name, row, http_method,
                               p_table_name, p_row)
+
+
+def check_for_redirect(current_instance):
+    if current_instance.request.protocol == HTTP:
+        current_instance.redirect(re.sub(r'^([^:]+)', HTTPS,
+                                  current_instance.request.full_url()), True)
+        return True
+
+    return False
