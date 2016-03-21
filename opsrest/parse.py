@@ -199,7 +199,11 @@ def verify_back_reference(resource, new_resource, schema,
 
     # Look for back reference using the index
     if index_list is not None:
-        index_list.append(str(resource.row))
+        table_schema = schema.ovs_tables[new_resource.table]
+        index_list = utils.inject_parent_into_index(str(resource.row),
+                                                    index_list,
+                                                    table_schema)
+
         row = verify_index(new_resource, None, index_list, schema, idl)
         if row.__getattr__(_refCol).uuid == resource.row:
             return True

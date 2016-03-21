@@ -377,7 +377,11 @@ def setup_row(index_values, table, row_data, txn, reflist, schema, idl,
                 # Iterate over each child_row
                 for child_index, child_row_data in row_data[key].iteritems():
                     child_index_values = utils.escaped_split(child_index)
-                    child_index_values.append(str(row.uuid))
+                    child_schema = schema.ovs_tables[child_table]
+                    child_index_values = \
+                        utils.inject_parent_into_index(str(row.uuid),
+                                                       child_index_values,
+                                                       child_schema)
                     (child_row, is_child_new) = setup_row(child_index_values,
                                                           child_table,
                                                           child_row_data,

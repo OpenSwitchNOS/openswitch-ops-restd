@@ -502,6 +502,28 @@ def list_to_json(data, value_type=None):
     return data_json
 
 
+def inject_parent_into_index(parent, index_values, table_schema):
+
+    if len(index_values) >= len(table_schema.index_columns):
+        return index_values
+
+    parent_location = 0
+
+    for item in table_schema.index_columns:
+        if item in table_schema.references and\
+                table_schema.references[item].relation == 'parent':
+            break
+
+        parent_location = parent_location + 1
+
+    if parent_location >= len(table_schema.index_columns):
+        return index_values
+
+    index_values.insert(parent_location, parent)
+
+    return index_values
+
+
 def index_to_row(index_values, table_schema, idl):
     """
     This subroutine fetches the row reference using index_values.
