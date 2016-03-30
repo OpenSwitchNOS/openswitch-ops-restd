@@ -13,7 +13,7 @@
 #   under the License.
 
 import _read, _write
-import ops.constants
+import ops.constants, ops.opsidl
 
 from ovs.db.idl import SchemaHelper, Idl
 
@@ -53,7 +53,7 @@ def register(extschema, ovsschema, ovsremote):
 
         schema_helper.register_columns(str(tablename), register_columns)
 
-    idl = Idl(ovsremote, schema_helper)
+    idl = ops.opsidl.OpsIdl(ovsremote, schema_helper)
     return idl
 
 
