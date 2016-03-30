@@ -18,6 +18,8 @@ import ops.utils
 import ops.constants
 
 
+global_ref_list = {}
+
 def _delete(row, table, schema, idl, txn):
     for key in schema.ovs_tables[table].children:
         if key in schema.ovs_tables[table].references:
@@ -69,9 +71,13 @@ def setup_row_references(rowdata, table, schema, idl):
     row_index = rowdata.keys()[0]
     row_data = rowdata.values()[0]
     table_schema = schema.ovs_tables[table]
-    idl_table = idl.tables[table]
 
-    row = ops.utils.index_to_row(row_index, table_schema, idl_table)
+    row = ops.utils.index_to_row(row_index, table_schema, idl)
+    if row is None:
+        if row_index in global_ref_list[table]:
+            row = global_ref_list[table][row_index]
+        else:
+            raise Exception('reference not found')
 
     # set references for this row
     for name, column in table_schema.references.iteritems():
@@ -88,7 +94,7 @@ def setup_row_references(rowdata, table, schema, idl):
             refschema = schema.ovs_tables[reftable]
 
             for refindex in row_data[name]:
-                refrow = ops.utils.index_to_row(refindex, refschema, refidl)
+                refrow = ops.utils.index_to_row(refindex, refschema, idl)
                 reflist.append(refrow)
             row.__setattr__(name, reflist)
 
@@ -117,13 +123,15 @@ def setup_row(rowdata, table_name, schema, idl, txn):
     row_index = rowdata.keys()[0]
     row_data = rowdata.values()[0]
     table_schema = schema.ovs_tables[table_name]
-    idl_table = idl.tables[table_name]
 
     # get row reference from table
     _new = False
-    row = ops.utils.index_to_row(row_index, table_schema, idl_table)
+    row = ops.utils.index_to_row(row_index, table_schema, idl)
     if row is None:
         row = txn.insert(idl.tables[table_name])
+        if table_name not in global_ref_list:
+            global_ref_list[table_name] = {}
+        global_ref_list[table_name][row_index] = row
         _new = True
 
     # NOTE: populate configuration data
@@ -262,6 +270,13 @@ def setup_row(rowdata, table_name, schema, idl, txn):
                 # set up children rows
                 if new_data is not None:
                     for x,y in new_data.iteritems():
+                        # NOTE: adding parent UUID to index
+                        split_x = ops.utils.unquote_split(x)
+                        split_x.insert(schema.ovs_tables[key].index_columns.index(key),row.uuid)
+                        tmp = []
+                        for _x in split_x:
+                            tmp.append(urllib.quote(str(_x), safe=''))
+                        x = '/'.join(tmp)
                         (child, is_new) = setup_row({x:y}, key, schema, idl, txn)
 
                         # fill the parent reference column
