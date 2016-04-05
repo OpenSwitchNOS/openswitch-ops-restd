@@ -30,7 +30,7 @@ class LoginHandler(base.BaseHandler):
 
     # pass the application reference to the handlers
     def initialize(self, ref_object):
-        pass
+        self.error_message = None
 
     # Overwrite BaseHandler's prepare, as LoginHandler does not
     # require authentication check prior to other operations
@@ -67,12 +67,12 @@ class LoginHandler(base.BaseHandler):
 
             username = self.get_argument(USERNAME_KEY)
 
-            if not is_user_login_authorized(username):
-                raise AuthenticationFailed
+            is_user_login_authorized(username)
 
             login_success = userauth.handle_user_login(self)
             if not login_success:
-                raise AuthenticationFailed
+                raise AuthenticationFailed('invalid username/password '
+                                           'combination')
             else:
                 self.set_status(httplib.OK)
 
