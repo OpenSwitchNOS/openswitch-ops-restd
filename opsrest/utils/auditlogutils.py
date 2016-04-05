@@ -20,7 +20,8 @@ aufd = None
 
 class RequiredParameter(Exception): pass
 
-def audit_log_user_msg(op, cfgdata, user, hostname, addr, result):
+def audit_log_user_msg(op, auditlog_type, path, cfgdata, user, hostname,
+                       addr, result, reason):
     """
     Simple wrapper function for audit_log_user_message() from the
     audit library to insure a consistent audit event message.
@@ -28,12 +29,15 @@ def audit_log_user_msg(op, cfgdata, user, hostname, addr, result):
     : param op: Text indicating the configuration operation that was
         performed.  Spaces are not allowed (replace with '-').
         No other special characters should be used.
+    : param auditlog_type: Type of event
+    : param path: Request path
     : param cfgdata: The configuration data that was changed or "None".
     : param user: The name of the user associated with the REST request.
     : param hostname: The hostname of local system, None if unknown.
     : param addr: The network address of the user, None if unknown.
     : param result: Result of the configuration operation.
         1 is "success", 0 is "failed"
+    : param reason: A custom message for the event
     : return: -1 on failure, otherwise the event number.
     """
     global aufd
@@ -53,7 +57,8 @@ def audit_log_user_msg(op, cfgdata, user, hostname, addr, result):
     if (user == None):
         user = pwd.getpwuid(os.getuid()).pw_name
 
-    msg = str("op=RESTD:%s %s  user=%s" % (op, cfg, user))
-    res = audit.audit_log_user_message(aufd, audit.AUDIT_USYS_CONFIG,
+    msg = str("op=RESTD:%s reason=%s path=%s %s  user=%s" % (op, reason, path,
+                                                             cfg, user))
+    res = audit.audit_log_user_message(aufd, auditlog_type,
                                        msg, hostname, addr, None, result)
     return res

@@ -65,16 +65,21 @@ class LoginHandler(base.BaseHandler):
         try:
             app_log.debug("Executing Login POST...")
 
+            self.login_reason = None
             username = self.get_argument(USERNAME_KEY)
 
-            if not is_user_login_authorized(username):
-                raise AuthenticationFailed
+            result = is_user_login_authorized(username)
+
+            if not result['status']:
+                raise AuthenticationFailed(result['reason'])
 
             login_success = userauth.handle_user_login(self)
             if not login_success:
-                raise AuthenticationFailed
+                raise AuthenticationFailed('invalid username/password '
+                                           'combination')
             else:
                 self.set_status(httplib.OK)
+                self.login_reason = '{"message": "Login successful"}'
 
         except APIException as e:
             self.on_exception(e)

@@ -26,7 +26,7 @@ from opsrest.exceptions import APIException, TransactionFailed, \
     ParameterNotAllowed, NotAuthenticated, \
     AuthenticationFailed, ForbiddenMethod
 from opsrest.settings import settings
-from opsrest.utils.auditlogutils import audit_log_user_msg
+from opsrest.utils.auditlogutils import audit_log_user_msg, audit
 from opsrest.utils.getutils import get_query_arg
 from opsrest.utils.utils import redirect_http_to_https
 
@@ -108,6 +108,7 @@ class BaseHandler(web.RequestHandler):
             app_log.debug("Caught Authentication Exception:\n%s" % e)
             self.set_header(HTTP_HEADER_LINK, REST_LOGIN_PATH)
             self.set_status(e.status_code)
+            self.login_reason = e
         else:
             app_log.debug("Caught APIException:\n%s" % e)
             self.set_status(e.status_code)
@@ -201,17 +202,23 @@ class BaseHandler(web.RequestHandler):
         if op in AUDIT_LOG_ACCEPTED_REQUESTS:
             path = self.request.path
             user = None
+            reason = None
+            auditlog_type = audit.AUDIT_USYS_CONFIG
             cfgdata = self.request.body
             if path == REST_LOGIN_PATH and \
                USERNAME_KEY in self.request.arguments:
                 user = self.request.arguments[USERNAME_KEY][0]
+                auditlog_type = audit.AUDIT_USER_LOGIN
+                if self.login_reason:
+                    reason = self.login_reason
             if not user and self.get_current_user():
                 user = self.get_current_user()
             hostname = self.request.host
             addr = self.request.remote_ip
             # HTTP/1.1 Status Code Successful 2xx validation
             result = int(200 <= self.get_status() < 300)
-            audit_log_user_msg(op, cfgdata, user, hostname, addr, result)
+            audit_log_user_msg(op, auditlog_type, path, cfgdata, user,
+                               hostname, addr, result, reason)
 
     def check_method_permission(self):
 

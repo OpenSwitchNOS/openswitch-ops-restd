@@ -71,8 +71,19 @@ def get_group_user_count(group_name):
 
 
 def is_user_login_authorized(username):
-    if username and user_exists(username):
-        permissions = set(rbac.get_user_permissions(username))
-        # isdisjoint is True if user's permissions and
-        # allowed permissions intersection is empty
-        return not permissions.isdisjoint(ALLOWED_LOGIN_PERMISSIONS)
+    if username:
+        if user_exists(username):
+            permissions = set(rbac.get_user_permissions(username))
+            if not permissions:
+                return {'status': False,
+                        'reason': 'user has no associated permissions'}
+            # isdisjoint is True if user's permissions and
+            # allowed permissions intersection is empty
+            if not permissions.isdisjoint(ALLOWED_LOGIN_PERMISSIONS):
+                return {'status': True, 'reason': ''}
+            else:
+                return {'status': False,
+                        'reason': 'user permissions not authorized'}
+        else:
+            return {'status': False,
+                    'reason': 'username does not exist'}
