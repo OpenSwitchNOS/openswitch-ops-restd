@@ -217,6 +217,9 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
                                 delete_list.append(item)
 
                         while delete_list:
+                            mutable_child = extschema.ovs_tables[child_table_name].mutable and child_table_name not in default_tables
+                            if not mutable_child:
+                                break
                             _delete(delete_list[0], child_table_name, extschema, idl, txn)
                             delete_list.pop(0)
 
@@ -282,6 +285,9 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
                                 delete_list.append(item)
 
                     while delete_list:
+                        mutable_child = extschema.ovs_tables[key].mutable and key not in default_tables
+                        if not mutable_child:
+                            break
                         _delete(delete_list[0], key, extschema, idl, txn)
                         delete_list.pop(0)
 
