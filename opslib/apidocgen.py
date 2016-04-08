@@ -1590,9 +1590,10 @@ def getFullAPI(schema):
         # Skipping those that are not top-level resources
         if table.parent is not None:
             continue
-        # Skipping those that are not referenced
-        if table_name not in schema.reference_map.values():
-            continue
+        # TODO --> Skipping those that are not referenced
+        # and without any category
+        # if table_name not in schema.reference_map.values():
+        #    continue
 
         parents = []
         parent_plurality = []
