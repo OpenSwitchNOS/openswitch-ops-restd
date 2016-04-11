@@ -90,7 +90,7 @@ def read(extschema, idl):
     config[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE] = config[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE].values()[0]
     return config
 
-def write(data, extschema, idl, txn):
+def write(data, extschema, idl, txn, block=False):
     """Write a new configuration to OpenSwitch OVSDB database
 
     Args:
@@ -133,4 +133,9 @@ def write(data, extschema, idl, txn):
 
         _write.setup_references(table_name, data, extschema, idl)
 
-    return txn.commit()
+    if not block:
+        # txn maybe be incomplete
+        return txn.commit()
+    else:
+        # txn is completed but will block until it is done
+        return txn.commit_block()
