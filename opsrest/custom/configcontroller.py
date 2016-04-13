@@ -15,13 +15,19 @@
 from tornado.log import app_log
 from tornado import gen
 
+# Debugging imports
+import json
+import traceback
+
 # Local imports
 import ops.dc
 import ops.cfgd
 from opsrest.exceptions import DataValidationFailed,\
-    NotModified, InternalError, NotFound, APIException
+    NotModified, InternalError, NotFound, APIException,\
+    MethodNotAllowed
 from opsrest.transaction import OvsdbTransactionResult
 from opsrest.custom.basecontroller import BaseController
+from opsrest.patch import create_patch, apply_patch
 from opsrest.constants import CONFIG_TYPE_RUNNING,\
     CONFIG_TYPE_STARTUP, SUCCESS, UNCHANGED, INCOMPLETE
 
@@ -31,32 +37,43 @@ class ConfigController(BaseController):
     def initialize(self):
         self.idl = self.context.manager.idl
         self.schema = self.context.restschema
+        self.txn = None
 
     @gen.coroutine
     def update(self, item_id, data, current_user, query_args):
-        request_type = self.get_request_type(query_args)
-        self.check_config_type(request_type)
-        status = None
-        error = None
-        if request_type == CONFIG_TYPE_RUNNING:
-            self.txn = self.context.manager.get_new_transaction()
-            result = OvsdbTransactionResult(ops.dc.write(data, self.schema,
-                                                         self.idl,
-                                                         self.txn.txn))
-            status = result.status
-            app_log.debug('Transaction result: %s', status)
-            if status == INCOMPLETE:
-                self.context.manager.monitor_transaction(self.txn)
-                yield self.txn.event.wait()
-                status = self.txn.status
-        else:
-            # FIXME: This is a blocking call.
-            (status, error) = ops.cfgd.write(data)
-        if status != SUCCESS:
-            if status == UNCHANGED:
-                raise NotModified
+        try:
+            request_type = self.get_request_type(query_args)
+            self.check_config_type(request_type)
+            status = None
+            error = None
+            if request_type == CONFIG_TYPE_RUNNING:
+                self.txn = self.context.manager.get_new_transaction()
+                result = OvsdbTransactionResult(ops.dc.write(data, self.schema,
+                                                             self.idl,
+                                                             self.txn.txn))
+                status = result.status
+                app_log.debug('Transaction result: %s', status)
+                if status == INCOMPLETE:
+                    self.context.manager.monitor_transaction(self.txn)
+                    yield self.txn.event.wait()
+                    status = self.txn.status
             else:
-                raise APIException(error)
+                # FIXME: This is a blocking call.
+                (status, error) = ops.cfgd.write(data)
+            if status != SUCCESS:
+                if status == UNCHANGED:
+                    raise NotModified
+                else:
+                    if request_type == CONFIG_TYPE_RUNNING:
+                        error = self.txn.get_error()
+                        self.txn.abort()
+                    raise APIException("Error: %s" % error)
+        except Exception as e:
+            if self.txn:
+                self.txn.abort()
+            # Add this line to traceback the exception
+            # traceback.print_exc()
+            raise APIException("Error: %s" % str(e))
 
     @gen.coroutine
     def get_all(self, current_user, selector, query_args):
@@ -90,3 +107,33 @@ class ConfigController(BaseController):
                     "types allowed: %s, %s" %\
                     (CONFIG_TYPE_RUNNING, CONFIG_TYPE_STARTUP)
             raise DataValidationFailed(error)
+
+    @gen.coroutine
+    def patch(self, item_id, data, current_user=None, query_args=None):
+        try:
+            # Get the resource's JSON to patch
+            resource_json = yield self.get_all(current_user, None, query_args)
+
+            if resource_json is None:
+                raise NotFound
+
+            # Create and verify patch
+            (patch, needs_update) = create_patch(data)
+
+            # Apply patch to the resource's JSON
+            patched_resource = apply_patch(patch, resource_json)
+            # Workaround: for some reason the dictionary returned by
+            # apply_patch is given a error when calling update.
+            # So, it needs to be converted to string and then to dict again.
+            # data = json.dumps(patched_resource)
+            # patched_resource = json.loads(data)
+
+            # Update resource only if needed, since a valid
+            # patch can contain PATCH_OP_TEST operations
+            # only, which do not modify the resource
+            if needs_update:
+                yield self.update(item_id, patched_resource, current_user, query_args)
+
+        # In case the resource doesn't implement GET/PUT
+        except MethodNotAllowed:
+            raise MethodNotAllowed("PATCH not allowed on resource")
