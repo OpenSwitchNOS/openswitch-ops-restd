@@ -128,3 +128,6 @@ class OvsdbConnectionManager:
 
     def monitor_transaction(self, txn):
         self.transactions.add_txn(txn)
+
+    def get_transactions(self):
+        return self.transactions
