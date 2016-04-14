@@ -23,7 +23,7 @@ from tornado import web
 
 from opsrest.constants import *
 from opsrest.exceptions import APIException, TransactionFailed, \
-    ParameterNotAllowed, NotAuthenticated, \
+    ParameterNotAllowed, NotAuthenticated, MissingArgumentsError, \
     AuthenticationFailed, ForbiddenMethod
 from opsrest.settings import settings
 from opsrest.utils.auditlogutils import audit_log_user_msg, audit
@@ -111,6 +111,9 @@ class BaseHandler(web.RequestHandler):
             app_log.debug("Caught Authentication Exception:\n%s" % e)
             self.set_header(HTTP_HEADER_LINK, REST_LOGIN_PATH)
             self.set_status(e.status_code)
+        elif isinstance(e, MissingArgumentsError):
+            app_log.debug("Missing username or password:\n%s" % e)
+            self.set_status(httplib.BAD_REQUEST)
         else:
             app_log.debug("Caught APIException:\n%s" % e)
             self.set_status(e.status_code)

@@ -32,6 +32,11 @@ class APIException(Exception):
         return json.dumps(error_json)
 
 
+class MissingArgumentsError(APIException):
+    status_code = httplib.BAD_REQUEST
+    status = httplib.responses[status_code]
+
+
 class DataValidationFailed(APIException):
     status_code = httplib.BAD_REQUEST
     status = httplib.responses[status_code]
