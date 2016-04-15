@@ -118,3 +118,7 @@ PATCH_OP_ADD = 'add'
 PATCH_OP_REPLACE = 'replace'
 PATCH_OP_MOVE = 'move'
 PATCH_OP_COPY = 'copy'
+
+# Types of callbacks for the manager
+CHANGES_CB_TYPE = 'changes_cb'
+ESTABLISHED_CB_TYPE = 'established_cb'
