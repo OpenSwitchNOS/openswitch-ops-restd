@@ -21,9 +21,12 @@ from ovs.db.idl import SchemaHelper
 
 from ops.opsidl import OpsIdl
 from opsrest.transaction import OvsdbTransactionList, OvsdbTransaction
-from opsrest.constants import \
-    OVSDB_DEFAULT_CONNECTION_TIMEOUT,\
+from opsrest.constants import (
+    CHANGES_CB_TYPE,
+    ESTABLISHED_CB_TYPE,
+    OVSDB_DEFAULT_CONNECTION_TIMEOUT,
     INCOMPLETE
+)
 
 
 class OvsdbConnectionManager:
@@ -36,14 +39,26 @@ class OvsdbConnectionManager:
         self.transactions = None
         self.curr_seqno = 0
         self.connected = False
+        self._callbacks = {}
+        self._callbacks[CHANGES_CB_TYPE] = set()
+        self._callbacks[ESTABLISHED_CB_TYPE] = set()
+        self.timeout_handle = None
+        self.ovs_socket = None
 
-    def start(self):
+    def start(self, register_tables=None):
         try:
             app_log.info("Starting Connection Manager!")
-            if self.idl is not None:
-                self.idl.close()
+
+            # Ensure stopping of any existing connection
+            self.stop()
             self.schema_helper = SchemaHelper(self.schema)
-            self.schema_helper.register_all()
+
+            if not register_tables:
+                self.schema_helper.register_all()
+            else:
+                for table in register_tables:
+                    self.schema_helper.register_table(table)
+
             self.idl = OpsIdl(self.remote, self.schema_helper)
             self.curr_seqno = self.idl.change_seqno
 
@@ -55,23 +70,39 @@ class OvsdbConnectionManager:
 
         except Exception as e:
             app_log.info("Connection Manager failed! Reason: %s" % e)
-            IOLoop.current().add_timeout(time.time() + self.timeout,
-                                         self.start)
+            self.timeout_handle = \
+                IOLoop.current().add_timeout(time.time() + self.timeout,
+                                             self.start)
+
+    def stop(self):
+        if self.ovs_socket:
+            IOLoop.current().remove_handler(self.ovs_socket)
+            self.ovs_socket = None
+
+        if self.timeout_handle:
+            IOLoop.current().remove_timeout(self.timeout_handle)
+            self.timeout_handle = None
+
+        if self.idl:
+            self.idl.close()
+            self.idl = None
 
     def idl_init(self):
         try:
             self.idl.run()
             if not self.idl.has_ever_connected():
                 app_log.debug("ovsdb unavailable retrying")
-                IOLoop.current().add_timeout(time.time() + self.timeout,
-                                             self.idl_init)
+                self.timeout_handle = \
+                    IOLoop.current().add_timeout(time.time() + self.timeout,
+                                                 self.idl_init)
             else:
                 self.idl_establish_connection()
         except error.Error as e:
             # idl will raise an error exception if cannot connect
             app_log.debug("Failed to connect, retrying. Reason: %s" % e)
-            IOLoop.current().add_timeout(time.time() + self.timeout,
-                                         self.idl_init)
+            self.timeout_handler = \
+                IOLoop.current().add_timeout(time.time() + self.timeout,
+                                             self.idl_init)
 
     def idl_reconnect(self):
         try:
@@ -82,15 +113,17 @@ class OvsdbConnectionManager:
             if self.curr_seqno == self.idl.change_seqno:
                 app_log.debug("ovsdb unavailable retrying")
                 self.connected = False
-                IOLoop.current().add_timeout(time.time() + self.timeout,
-                                             self.idl_reconnect)
+                self.timeout_handler = \
+                    IOLoop.current().add_timeout(time.time() + self.timeout,
+                                                 self.idl_reconnect)
             else:
                 self.idl_establish_connection()
         except error.Error as e:
             # idl will raise an error exception if cannot reconnect
             app_log.debug("Failed to connect, retrying. Reason: %s" % e)
-            IOLoop.current().add_timeout(time.time() + self.timeout,
-                                         self.idl_reconnect)
+            self.timeout_handler = \
+                IOLoop.current().add_timeout(time.time() + self.timeout,
+                                             self.idl_reconnect)
 
     def idl_establish_connection(self):
         app_log.info("ovsdb connection ready")
@@ -101,6 +134,19 @@ class OvsdbConnectionManager:
                                      self.idl_run,
                                      IOLoop.READ | IOLoop.ERROR)
 
+        self.run_callbacks(ESTABLISHED_CB_TYPE)
+
+    def idl_check_and_update(self):
+        self.idl.run()
+
+        if self.curr_seqno != self.idl.change_seqno:
+            self.run_callbacks(CHANGES_CB_TYPE)
+
+            if len(self.transactions.txn_list):
+                self.check_transactions()
+
+        self.curr_seqno = self.idl.change_seqno
+
     def idl_run(self, fd=None, events=None):
         if events & IOLoop.ERROR:
             app_log.debug("Socket fd %s error" % fd)
@@ -108,12 +154,7 @@ class OvsdbConnectionManager:
                 IOLoop.current().remove_handler(fd)
                 self.idl_reconnect()
         elif events & IOLoop.READ:
-            app_log.debug("Updating idl replica")
-            self.idl.run()
-            if self.curr_seqno != self.idl.change_seqno and \
-               len(self.transactions.txn_list):
-                self.check_transactions()
-            self.curr_seqno = self.idl.change_seqno
+            self.idl_check_and_update()
 
     def check_transactions(self):
         for index, tx in enumerate(self.transactions.txn_list):
@@ -128,3 +169,20 @@ class OvsdbConnectionManager:
 
     def monitor_transaction(self, txn):
         self.transactions.add_txn(txn)
+
+    def add_callback(self, cb_type, callback):
+        if cb_type in self._callbacks:
+            self._callbacks[cb_type].add(callback)
+
+    def remove_callback(self, cb_type, callback):
+        if cb_type in self._callbacks:
+            self._callbacks[cb_type].discard(callback)
+
+    def run_callbacks(self, cb_type):
+        if cb_type in self._callbacks:
+            for callback in self._callbacks[cb_type]:
+                callback(self, self.idl)
+
+            # Clear any change tracking info received for next notifications
+            if cb_type == CHANGES_CB_TYPE:
+                self.idl.track_clear_all()
