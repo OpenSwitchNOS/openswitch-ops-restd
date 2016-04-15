@@ -260,25 +260,31 @@ def delete_row_reference(reflist, row, row_ref, column):
     row_ref.__setattr__(column, updated_list)
 
 
-# create a new row, populate it with data
-def setup_new_row(resource, data, schema, txn, idl):
-
+def setup_new_row_by_resource(resource, data, schema, txn, idl):
     if not isinstance(resource, Resource):
         return None
 
-    if resource.table is None:
+    row = setup_new_row(resource.table, data, schema, txn, idl)
+
+    if row:
+        resource.row = row.uuid
+
+    return row
+
+
+# create a new row, populate it with data
+def setup_new_row(table_name, data, schema, txn, idl):
+    if table_name is None:
         return None
-    row = txn.insert(idl.tables[resource.table])
 
-    # Update the resource's row info
-    resource.row = row.uuid
+    row = txn.insert(idl.tables[table_name])
 
-    # add config items
-    config_keys = schema.ovs_tables[resource.table].config
+    # Add config items
+    config_keys = schema.ovs_tables[table_name].config
     set_config_fields(row, data, config_keys)
 
     # add reference iitems
-    reference_keys = schema.ovs_tables[resource.table].references.keys()
+    reference_keys = schema.ovs_tables[table_name].references.keys()
     set_reference_items(row, data, reference_keys)
 
     return row
@@ -334,27 +340,35 @@ def set_reference_items(row, data, reference_keys):
                 row.__setattr__(key, reflist)
 
 
+def get_attribute_and_type(row, ovs_column):
+    attribute = row.__getattr__(ovs_column.name)
+    attribute_type = type(attribute)
+
+    # Convert single element lists to scalar
+    # if schema defines a max of 1 element
+    if attribute_type is list and ovs_column.n_max == 1:
+        if len(attribute) > 0:
+            attribute = attribute[0]
+        else:
+            attribute = None
+
+    value_type = ovs_column.type
+    if attribute_type is dict:
+        value_type = ovs_column.value_type
+
+    return attribute, value_type
+
+
+def row_ovs_column_to_json(row, ovs_column):
+    attribute, value_type = get_attribute_and_type(row, ovs_column)
+    return to_json(attribute, value_type)
+
+
 def row_to_json(row, column_keys):
 
     data_json = {}
-    for key in column_keys:
-
-        attribute = row.__getattr__(key)
-        attribute_type = type(attribute)
-
-        # Convert single element lists to scalar
-        # if schema defines a max of 1 element
-        if attribute_type is list and column_keys[key].n_max == 1:
-            if len(attribute) > 0:
-                attribute = attribute[0]
-            else:
-                attribute = None
-
-        value_type = column_keys[key].type
-        if attribute_type is dict:
-            value_type = column_keys[key].value_type
-
-        data_json[key] = to_json(attribute, value_type)
+    for key, ovs_col in column_keys.iteritems():
+        data_json[key] = row_ovs_column_to_json(row, ovs_col)
 
     return data_json
 
@@ -620,10 +634,23 @@ def escaped_split(s_in):
     return s_in
 
 
+def get_reference_uri(table_name, row, schema, idl):
+    uri = OVSDB_BASE_URI
+    ref_table = schema.ovs_tables[table_name]
+
+    if ref_table.parent is not None:
+        uri += get_reference_parent_uri(table_name, row, schema, idl)
+
+    uri += ref_table.plural_name + '/'
+    uri += '/'.join(get_table_key(row, table_name, schema, idl))
+
+    return uri
+
+
 def get_reference_parent_uri(table_name, row, schema, idl):
     uri = ''
     path = get_parent_trace(table_name, row, schema, idl)
-    #Don't include Open_vSwitch table
+    # Don't include Open_vSwitch table
     for table_name, indexes in path[1:]:
         plural_name = schema.ovs_tables[table_name].plural_name
         uri += str(plural_name) + '/' + "/".join(indexes) + '/'

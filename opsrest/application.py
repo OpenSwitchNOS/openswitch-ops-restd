@@ -18,6 +18,7 @@ from opsrest.manager import OvsdbConnectionManager
 from opslib import restparser
 from opsrest import constants
 from opsvalidator import validator
+from .notifications.handler import NotificationHandler
 import cookiesecret
 
 
@@ -38,6 +39,9 @@ class OvsdbApiApplication(Application):
 
         # Load all custom validators
         validator.init_plugins(constants.OPSPLUGIN_DIR)
+
+        self.notification_handler = NotificationHandler(self.restschema,
+                                                        self.manager)
 
     # adds 'self' to url_patterns
     def _get_url_patterns(self):

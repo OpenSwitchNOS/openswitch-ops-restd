@@ -36,14 +36,22 @@ class OvsdbConnectionManager:
         self.transactions = None
         self.curr_seqno = 0
         self.connected = False
+        self._change_callbacks = set()
 
-    def start(self):
+    def start(self, register_tables=None):
         try:
             app_log.info("Starting Connection Manager!")
-            if self.idl is not None:
-                self.idl.close()
+
+            # Ensure stopping of any existing connection
+            self.stop()
             self.schema_helper = SchemaHelper(self.schema)
-            self.schema_helper.register_all()
+
+            if not register_tables:
+                self.schema_helper.register_all()
+            else:
+                for table in register_tables:
+                    self.schema_helper.register_table(table)
+
             self.idl = OpsIdl(self.remote, self.schema_helper)
             self.curr_seqno = self.idl.change_seqno
 
@@ -57,6 +65,12 @@ class OvsdbConnectionManager:
             app_log.info("Connection Manager failed! Reason: %s" % e)
             IOLoop.current().add_timeout(time.time() + self.timeout,
                                          self.start)
+
+    def stop(self):
+        if self.idl is not None:
+            self.idl.close()
+
+        self.idl = None
 
     def idl_init(self):
         try:
@@ -101,6 +115,18 @@ class OvsdbConnectionManager:
                                      self.idl_run,
                                      IOLoop.READ | IOLoop.ERROR)
 
+    def idl_check_and_update(self):
+        app_log.debug("Checking and updating idl replica")
+        self.idl.run()
+
+        if self.curr_seqno != self.idl.change_seqno:
+            self.run_change_callbacks()
+
+            if len(self.transactions.txn_list):
+                self.check_transactions()
+
+        self.curr_seqno = self.idl.change_seqno
+
     def idl_run(self, fd=None, events=None):
         if events & IOLoop.ERROR:
             app_log.debug("Socket fd %s error" % fd)
@@ -108,12 +134,7 @@ class OvsdbConnectionManager:
                 IOLoop.current().remove_handler(fd)
                 self.idl_reconnect()
         elif events & IOLoop.READ:
-            app_log.debug("Updating idl replica")
-            self.idl.run()
-            if self.curr_seqno != self.idl.change_seqno and \
-               len(self.transactions.txn_list):
-                self.check_transactions()
-            self.curr_seqno = self.idl.change_seqno
+            self.idl_check_and_update()
 
     def check_transactions(self):
         for index, tx in enumerate(self.transactions.txn_list):
@@ -128,3 +149,16 @@ class OvsdbConnectionManager:
 
     def monitor_transaction(self, txn):
         self.transactions.add_txn(txn)
+
+    def add_change_callback(self, callback):
+        self._change_callbacks.add(callback)
+
+    def remove_change_callback(self, callback):
+        self._change_callbacks.discard(callback)
+
+    def run_change_callbacks(self):
+        for callback in self._change_callbacks:
+            callback(self.idl)
+
+        # Clear any change tracking info received for next notifications
+        self.idl.track_clear_all()
