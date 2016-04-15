@@ -206,9 +206,7 @@ def verify_back_reference(resource, new_resource, schema,
             return False
     else:
         # Look for all resources that back reference the same parent
-        row = None
         row_list = []
-        index_list = []
         for item in idl.tables[new_resource.table].rows.itervalues():
             reference = item.__getattr__(_refCol)
 

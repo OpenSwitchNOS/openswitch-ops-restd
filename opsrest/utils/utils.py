@@ -70,7 +70,7 @@ def get_column_data_from_resource(resource, idl):
 
     row = idl.tables[resource.table].rows[resource.row]
 
-    if type(resource.column) is types.StringType:
+    if type(str(resource.column)) is types.StringType:
         return row.__getattr__(resource.column)
     elif type(resource.column) is types.ListType:
         columns = []
@@ -260,25 +260,31 @@ def delete_row_reference(reflist, row, row_ref, column):
     row_ref.__setattr__(column, updated_list)
 
 
-# create a new row, populate it with data
-def setup_new_row(resource, data, schema, txn, idl):
-
+def setup_new_row_by_resource(resource, data, schema, txn, idl):
     if not isinstance(resource, Resource):
         return None
 
-    if resource.table is None:
+    row = setup_new_row(resource.table, data, schema, txn, idl)
+
+    if row:
+        resource.row = row.uuid
+
+    return row
+
+
+# create a new row, populate it with data
+def setup_new_row(table_name, data, schema, txn, idl):
+    if table_name is None:
         return None
-    row = txn.insert(idl.tables[resource.table])
 
-    # Update the resource's row info
-    resource.row = row.uuid
+    row = txn.insert(idl.tables[table_name])
 
-    # add config items
-    config_keys = schema.ovs_tables[resource.table].config
+    # Add config items
+    config_keys = schema.ovs_tables[table_name].config
     set_config_fields(row, data, config_keys)
 
     # add reference iitems
-    reference_keys = schema.ovs_tables[resource.table].references.keys()
+    reference_keys = schema.ovs_tables[table_name].references.keys()
     set_reference_items(row, data, reference_keys)
 
     return row
@@ -334,27 +340,35 @@ def set_reference_items(row, data, reference_keys):
                 row.__setattr__(key, reflist)
 
 
+def get_attribute_and_type(row, ovs_column):
+    attribute = row.__getattr__(ovs_column.name)
+    attribute_type = type(attribute)
+
+    # Convert single element lists to scalar
+    # if schema defines a max of 1 element
+    if attribute_type is list and ovs_column.n_max == 1:
+        if len(attribute) > 0:
+            attribute = attribute[0]
+        else:
+            attribute = None
+
+    value_type = ovs_column.type
+    if attribute_type is dict:
+        value_type = ovs_column.value_type
+
+    return attribute, value_type
+
+
+def row_ovs_column_to_json(row, ovs_column):
+    attribute, value_type = get_attribute_and_type(row, ovs_column)
+    return to_json(attribute, value_type)
+
+
 def row_to_json(row, column_keys):
 
     data_json = {}
-    for key in column_keys:
-
-        attribute = row.__getattr__(key)
-        attribute_type = type(attribute)
-
-        # Convert single element lists to scalar
-        # if schema defines a max of 1 element
-        if attribute_type is list and column_keys[key].n_max == 1:
-            if len(attribute) > 0:
-                attribute = attribute[0]
-            else:
-                attribute = None
-
-        value_type = column_keys[key].type
-        if attribute_type is dict:
-            value_type = column_keys[key].value_type
-
-        data_json[key] = to_json(attribute, value_type)
+    for key, ovs_col in column_keys.iteritems():
+        data_json[key] = row_ovs_column_to_json(row, ovs_col)
 
     return data_json
 
@@ -620,13 +634,40 @@ def escaped_split(s_in):
     return s_in
 
 
+def get_reference_uri(table_name, row, schema, idl):
+    uri = OVSDB_BASE_URI
+    ref_table = schema.ovs_tables[table_name]
+    is_forward_ref = True
+
+    if ref_table.parent is not None:
+        _, relation = get_parent_child_col_and_relation(schema,
+                                                        ref_table.parent,
+                                                        table_name)
+
+        if relation == OVSDB_SCHEMA_BACK_REFERENCE:
+            is_forward_ref = False
+
+        uri += get_reference_parent_uri(table_name, row, schema, idl)
+
+    uri += ref_table.plural_name + '/'
+    uri += '/'.join(get_table_key(row, table_name, schema, idl,
+                                  is_forward_ref))
+
+    return uri
+
+
 def get_reference_parent_uri(table_name, row, schema, idl):
     uri = ''
     path = get_parent_trace(table_name, row, schema, idl)
-    #Don't include Open_vSwitch table
-    for table_name, indexes in path[1:]:
+
+    for table_name, indexes in path:
+        # Don't include Open_vSwitch table
+        if table_name == OVSDB_SCHEMA_SYSTEM_TABLE:
+            continue
+
         plural_name = schema.ovs_tables[table_name].plural_name
         uri += str(plural_name) + '/' + "/".join(indexes) + '/'
+
     app_log.debug("Reference uri %s" % uri)
     return uri
 
@@ -640,9 +681,16 @@ def get_parent_trace(table_name, row, schema, idl):
     path = []
     while table.parent is not None and row is not None:
         parent_table = schema.ovs_tables[table.parent]
-        column = get_parent_column_ref(parent_table.name, table.name, schema)
-        row = get_parent_row(parent_table.name, row, column, schema, idl)
-        key_list = get_table_key(row, parent_table.name, schema, idl)
+        column, relation = get_parent_child_col_and_relation(schema,
+                                                             table.parent,
+                                                             table.name)
+        if relation == OVSDB_SCHEMA_BACK_REFERENCE:
+            row = get_column_data_from_row(row, column)
+        else:
+            row, unused_value = get_parent_row(parent_table.name, row, column,
+                                               schema, idl)
+
+        key_list = get_table_key(row, parent_table.name, schema, idl, None)
         table_path = (parent_table.name, key_list)
         path.insert(0, table_path)
         table = parent_table
@@ -676,7 +724,7 @@ def get_parent_row(table_name, child_row, column, schema, idl):
                     return row_ref, value
             else:
                 if value.uuid == child_row.uuid:
-                    return row_ref
+                    return row_ref, None
 
 
 def get_table_key(row, table_name, schema, idl, forward_ref=True):
@@ -689,6 +737,17 @@ def get_table_key(row, table_name, schema, idl, forward_ref=True):
 
     # Verify if is kv reference
     if table.parent:
+        column_ref = None
+
+        if forward_ref is None:
+            forward_ref = True
+            column_ref, relation = \
+                get_parent_child_col_and_relation(schema, table.parent,
+                                                  table_name)
+
+            if relation == OVSDB_SCHEMA_BACK_REFERENCE:
+                forward_ref = False
+
         if forward_ref:
             cur_table_name = table.parent
             table_ref = table_name
@@ -698,8 +757,10 @@ def get_table_key(row, table_name, schema, idl, forward_ref=True):
             table_ref = table.parent
             relation = OVSDB_SCHEMA_PARENT
 
-        column_ref = get_parent_column_ref(cur_table_name, table_ref,
-                                           schema, relation)
+        if column_ref is None:
+            column_ref = get_parent_column_ref(cur_table_name, table_ref,
+                                               schema, relation)
+
         cur_table = schema.ovs_tables[cur_table_name]
         if cur_table.references[column_ref].kv_type:
             parent_row, key = get_parent_row(cur_table_name,
@@ -745,3 +806,20 @@ def redirect_http_to_https(current_instance):
         return True
 
     return False
+
+
+def get_parent_child_col_and_relation(schema, parent_table, child_table):
+    parent_schema = schema.ovs_tables[parent_table]
+    for column, reference in parent_schema.references.iteritems():
+        if child_table == reference.ref_table:
+            if (reference.relation == OVSDB_SCHEMA_CHILD or
+                    reference.relation == OVSDB_SCHEMA_REFERENCE):
+                return (column, reference.relation)
+
+    child_schema = schema.ovs_tables[child_table]
+    for column, reference in child_schema.references.iteritems():
+        if parent_table == reference.ref_table:
+            if reference.relation == OVSDB_SCHEMA_PARENT:
+                return (column, OVSDB_SCHEMA_BACK_REFERENCE)
+
+    return (None, None)
