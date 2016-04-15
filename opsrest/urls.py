@@ -16,15 +16,16 @@ from opsrest.handlers.staticcontent import StaticContentHandler
 from opsrest.handlers.login import LoginHandler
 from opsrest.handlers.ovsdbapi import OVSDBAPIHandler
 from opsrest.handlers.customrest import CustomRESTHandler
+from opsrest.handlers.websocket.notifications import WSNotificationsHandler
 from custom.logcontroller import LogController
 from custom.accountcontroller import AccountController
 from custom.configcontroller import ConfigController
 
 REGEX_RESOURCE_ID = '?(?P<resource_id>[A-Za-z0-9-_]+[$]?)?/?'
 
-
 url_patterns =\
     [(r'/login', LoginHandler),
+     (r'/rest/v1/ws/notifications', WSNotificationsHandler),
      (r'/rest/v1/system', OVSDBAPIHandler),
      (r'/rest/v1/system/.*', OVSDBAPIHandler)]
 
