@@ -16,11 +16,20 @@
 import pwd
 import grp
 import rbac
+import userauth
 
 from subprocess import PIPE, Popen
-
-from opsrest.exceptions import AuthenticationFailed
-from opsrest.constants import ALLOWED_LOGIN_PERMISSIONS
+from opsrest.exceptions import (
+    AuthenticationFailed,
+    ForbiddenMethod,
+    NotAuthenticated
+)
+from opsrest.constants import (
+    ALLOWED_LOGIN_PERMISSIONS,
+    METHOD_PERMISSION_MAP,
+    REQUEST_TYPE_OPTIONS
+)
+from opsrest.settings import settings
 
 
 def get_group_id(group_name):
@@ -82,3 +91,31 @@ def check_user_login_authorization(username):
             raise AuthenticationFailed('user permissions not authorized')
     else:
         raise AuthenticationFailed('username does not exist')
+
+
+def check_authenticated(req_handler, req_method):
+    if settings['auth_enabled'] and req_method != REQUEST_TYPE_OPTIONS:
+        is_authenticated = userauth.is_user_authenticated(req_handler)
+    else:
+        is_authenticated = True
+
+    if not is_authenticated:
+        raise NotAuthenticated
+
+
+def get_current_user(req_handler):
+    return userauth.get_request_user(req_handler)
+
+
+def check_method_permission(req_handler, method):
+    # Check permissions only if authentication is enabled
+    # Plus, OPTIONS is allowed for unauthenticated users
+    if method != REQUEST_TYPE_OPTIONS:
+        username = get_current_user(req_handler)
+        if username is None:
+            if settings['auth_enabled']:
+                raise NotAuthenticated
+        else:
+            permissions = rbac.get_user_permissions(username)
+            if METHOD_PERMISSION_MAP[method] not in permissions:
+                raise ForbiddenMethod
