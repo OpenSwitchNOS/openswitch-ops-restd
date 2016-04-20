@@ -92,7 +92,7 @@ def verify_http_method(resource, schema, http_method):
                     return True
             # Ex. Ports
             elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
-                return True
+                return False
 
         return False
 
