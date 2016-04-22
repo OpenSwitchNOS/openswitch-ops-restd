@@ -25,14 +25,19 @@ from tornado.log import app_log
 def get_depth_param(query_arguments):
 
     depth = 0
+
     depth_param = get_query_arg(REST_QUERY_PARAM_DEPTH, query_arguments)
     if depth_param:
         try:
             depth = int(depth_param)
-            if depth < 0:
+            if depth < DEPTH_MIN_VALUE or depth > DEPTH_MAX_VALUE:
                 error_json = utils.to_json_error("Depth parameter must be " +
-                                                 "greater or equal than zero")
+                                                 "greater or equal than " +
+                                                 str(DEPTH_MIN_VALUE) + " " +
+                                                 "and lower or equal than " +
+                                                 str(DEPTH_MAX_VALUE))
                 return {ERROR: error_json}
+
         except ValueError:
             error_json = utils.to_json_error("Depth parameter must " +
                                              "be a number")
