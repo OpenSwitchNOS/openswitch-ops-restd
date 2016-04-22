@@ -230,7 +230,8 @@ def genGetParams(table, is_instance=False):
     param = {}
     param["name"] = "depth"
     param["in"] = "query"
-    param["description"] = "maximum depth of subresources included in result"
+    param["description"] = "maximum depth of subresources included in result, " + \
+                           "where depth value can be between zero and ten"
     param["required"] = False
     param["type"] = "string"
     params.append(param)
@@ -265,9 +266,9 @@ def genGetParams(table, is_instance=False):
         params.append(param)
 
         param = {}
-        param["name"] = "columns"
+        param["name"] = "keys"
         param["in"] = "query"
-        param["description"] = "comma separated list of columns to display " \
+        param["description"] = "comma separated list of keys to display " \
                                "from the result"
         param["required"] = False
         param["type"] = "string"
