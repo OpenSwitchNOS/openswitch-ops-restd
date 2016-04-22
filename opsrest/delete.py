@@ -47,6 +47,8 @@ def delete_resource(resource, schema, txn, idl):
         app_log.debug("Custom validations failed:")
         app_log.debug(e.error)
         raise DataValidationFailed(e.error)
+    except:
+        raise MethodNotAllowed
 
     if resource.relation == OVSDB_SCHEMA_CHILD:
 
