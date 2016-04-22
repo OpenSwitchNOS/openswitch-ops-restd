@@ -29,10 +29,13 @@ def get_depth_param(query_arguments):
     if depth_param:
         try:
             depth = int(depth_param)
-            if depth < 0:
+            if depth < 0 or depth > 10:
                 error_json = utils.to_json_error("Depth parameter must be " +
-                                                 "greater or equal than zero")
+                                                 "greater or equal than " +
+                                                 "zero and lower or equal " +
+                                                 "than ten")
                 return {ERROR: error_json}
+
         except ValueError:
             error_json = utils.to_json_error("Depth parameter must " +
                                              "be a number")
