@@ -41,6 +41,10 @@ REST_QUERY_PARAM_LIMIT = 'limit'
 REST_QUERY_PARAM_DEPTH = "depth"
 REST_QUERY_PARAM_KEYS = 'keys'
 
+# Recursive GET argument depth max value
+# Set to 10 to prevent a stack overflow
+DEPTH_MAX_VALUE = 10
+
 # Ovsdb schema constants
 OVSDB_SCHEMA_SYSTEM_TABLE = 'System'
 OVSDB_SCHEMA_SYSTEM_URI = 'system'
