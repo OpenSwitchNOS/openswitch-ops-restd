@@ -550,6 +550,34 @@ def kv_index_to_row(index_values, parent, idl):
     return None
 
 
+def create_index(schema, data, resource, new_row):
+    index = None
+    table = resource.next.table
+    restschema = schema.ovs_tables[table]
+
+    keyname = ""
+    if resource.relation == OVSDB_SCHEMA_CHILD:
+        ref = schema.ovs_tables[resource.table].references[resource.column]
+        if ref.kv_type:
+            keyname = ref.column.keyname
+
+    indexes = restschema.indexes
+    if len(indexes) == 1 and indexes[0] == "uuid":
+        if keyname:
+            indexes = str(keyname)
+            index = data[indexes]
+        else:
+            index = new_row.uuid
+    elif len(indexes) == 1:
+        index = data[indexes[0]]
+    else:
+        tmp = []
+        for item in indexes:
+            tmp.append(urllib.quote(str(data[item]), safe=''))
+        index = "/".join(tmp)
+    return str(index)
+
+
 def row_to_index(row, table, restschema, idl, parent_row=None):
 
     index = None
