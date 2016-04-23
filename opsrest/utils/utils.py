@@ -550,6 +550,26 @@ def kv_index_to_row(index_values, parent, idl):
     return None
 
 
+def get_index(keyname, schema, data, table, row_uuid):
+    index = None
+    restschema = schema.ovs_tables[table]
+    indexes = restschema.indexes
+    if len(indexes) == 1 and indexes[0] == "uuid":
+        if keyname:
+            indexes = str(keyname)
+            index = data[indexes]
+        else:
+            index = row_uuid
+    elif len(indexes) == 1:
+        index = data[indexes[0]]
+    else:
+        tmp = []
+        for item in indexes:
+            tmp.append(urllib.quote(str(data[item]), safe=''))
+        index = "/".join(tmp)
+    return str(index)
+
+
 def row_to_index(row, table, restschema, idl, parent_row=None):
 
     index = None

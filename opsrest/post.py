@@ -20,6 +20,7 @@ from opsrest.exceptions import MethodNotAllowed, DataValidationFailed
 from opsvalidator.error import ValidationError
 
 import httplib
+import urllib
 
 from tornado.log import app_log
 
@@ -36,11 +37,13 @@ def post_resource(data, resource, schema, txn, idl):
     are attemtping to add a Port as a reference on bridge
     """
 
+    original_data = data
+    app_log.info("data untouched --> %s" % data)
     if resource is None or resource.next is None:
         app_log.info("POST is not allowed on System table")
         raise MethodNotAllowed
 
-    # get the last resource pair
+# get the last resource pair
     while True:
         if resource.next.next is None:
             break
@@ -60,6 +63,7 @@ def post_resource(data, resource, schema, txn, idl):
 
     app_log.debug("adding new resource to " + resource.next.table + " table")
 
+    keyname = ""
     if resource.relation == OVSDB_SCHEMA_CHILD:
         # create new row, populate it with data
         # add it as a reference to the parent resource
@@ -83,7 +87,6 @@ def post_resource(data, resource, schema, txn, idl):
     elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
         new_row = utils.setup_new_row(resource.next, verified_data,
                                       schema, txn, idl)
-
         # a non-root table entry MUST be referenced elsewhere
         if OVSDB_SCHEMA_REFERENCED_BY in verified_data:
             for reference in verified_data[OVSDB_SCHEMA_REFERENCED_BY]:
@@ -97,5 +100,8 @@ def post_resource(data, resource, schema, txn, idl):
         app_log.debug(e.error)
         raise DataValidationFailed(e.error)
 
+    index = utils.get_index(keyname, schema, verified_data,
+                            resource.next.table, new_row.uuid)
     result = txn.commit()
-    return OvsdbTransactionResult(result)
+
+    return OvsdbTransactionResult(result, str(index))
