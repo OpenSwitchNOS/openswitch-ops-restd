@@ -133,6 +133,8 @@ class OVSDBAPIHandler(base.BaseHandler):
                                         self.idl)
 
             status = result.status
+            resource_uri = self.request.path + "/" + result.index
+
             if status == INCOMPLETE:
                 self.ref_object.manager.monitor_transaction(self.txn)
                 # on 'incomplete' state we wait until the transaction
@@ -142,6 +144,7 @@ class OVSDBAPIHandler(base.BaseHandler):
 
             # complete transaction
             self.transaction_complete(status)
+            self.write(resource_uri)
 
         except APIException as e:
             self.on_exception(e)

@@ -83,7 +83,6 @@ def post_resource(data, resource, schema, txn, idl):
     elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
         new_row = utils.setup_new_row(resource.next, verified_data,
                                       schema, txn, idl)
-
         # a non-root table entry MUST be referenced elsewhere
         if OVSDB_SCHEMA_REFERENCED_BY in verified_data:
             for reference in verified_data[OVSDB_SCHEMA_REFERENCED_BY]:
@@ -97,5 +96,6 @@ def post_resource(data, resource, schema, txn, idl):
         app_log.debug(e.error)
         raise DataValidationFailed(e.error)
 
+    index = utils.row_to_index(new_row, resource.next.table, schema, idl)
     result = txn.commit()
-    return OvsdbTransactionResult(result)
+    return OvsdbTransactionResult(result, index)
