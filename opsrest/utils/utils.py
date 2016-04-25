@@ -251,6 +251,7 @@ def delete_all_references(resource, schema, idl):
                     #delete the reference on that row and column
                     delete_row_reference(reflist, row, row_ref, column_name)
 
+    return row
 
 def delete_row_reference(reflist, row, row_ref, column):
     updated_list = []
