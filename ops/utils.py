@@ -16,12 +16,13 @@ import ovs
 import urllib
 import types
 import uuid
+import six
 
 import ovs.db.types as ovs_types
 
 
 def unquote_split(s_in):
-    if isinstance(s_in, str):
+    if isinstance(s_in, six.string_types):
         s_in = s_in.split('/')
         s_in = [urllib.unquote(i) for i in s_in if i != '']
         return s_in
