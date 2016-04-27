@@ -25,7 +25,8 @@ from tornado import gen
 from opsrest.constants import *
 from opsrest.exceptions import APIException, TransactionFailed, \
     ParameterNotAllowed, NotAuthenticated, \
-    AuthenticationFailed, ForbiddenMethod
+    AuthenticationFailed, ForbiddenMethod, \
+    DataValidationFailed
 from opsrest.settings import settings
 from opsrest.utils.auditlogutils import audit_log_user_msg, audit
 from opsrest.utils.getutils import get_query_arg
@@ -84,6 +85,13 @@ class BaseHandler(web.RequestHandler):
                                            REST_QUERY_PARAM_DEPTH,
                                            REST_QUERY_PARAM_KEYS,
                                            REQUEST_TYPE_READ))
+
+            if (self.request.method == REQUEST_TYPE_CREATE or
+               self.request.method == REQUEST_TYPE_UPDATE or
+               self.request.method == REQUEST_TYPE_PATCH):
+                if int(self.request.headers['Content-Length']) \
+                 > MAX_BODY_SIZE:
+                    raise DataValidationFailed("Content-Length too long")
 
         except APIException as e:
             self.on_exception(e)
