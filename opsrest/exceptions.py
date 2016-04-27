@@ -101,6 +101,11 @@ class InternalError(APIException):
     status = httplib.responses[status_code]
 
 
+class MaxBodySizeError(APIException):
+    status_code = httplib.BAD_REQUEST
+    status = httplib.responses[status_code]
+
+
 class PasswordChangeError(APIException):
     def __init__(self, detail=None, status_code=httplib.INTERNAL_SERVER_ERROR):
         self.detail = detail
