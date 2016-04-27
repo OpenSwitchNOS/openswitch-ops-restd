@@ -46,6 +46,9 @@ REST_QUERY_PARAM_KEYS = 'keys'
 DEPTH_MIN_VALUE = 0
 DEPTH_MAX_VALUE = 10
 
+# Set to 1MB to avoid idl overload
+MAX_BODY_SIZE = 1000000
+
 # Ovsdb schema constants
 OVSDB_SCHEMA_SYSTEM_TABLE = 'System'
 OVSDB_SCHEMA_SYSTEM_URI = 'system'
