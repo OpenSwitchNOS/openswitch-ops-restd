@@ -168,7 +168,8 @@ def verify_post_data(data, resource, schema, idl):
             references = schema.ovs_tables[resource.next.table].references
             for key, value in references.iteritems():
                 if value.relation == 'parent':
-                    verified_data.update({key: resource})
+                    parent_row = idl.tables[resource.table].rows[resource.row]
+                    verified_data.update({key: parent_row})
 
     except DataValidationFailed as e:
         raise e
