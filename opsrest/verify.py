@@ -190,13 +190,17 @@ def verify_put_data(data, resource, schema, idl):
     else:
         resource_verify = resource.next
 
+    # Get the targeted row
+    row = idl.tables[resource_verify.table].rows[resource_verify.row]
+
     # verify config and reference columns data
     verified_data = {}
     try:
         verified_config_data = verify_config_data(resource_verify,
                                                   _data,
                                                   schema,
-                                                  REQUEST_TYPE_UPDATE)
+                                                  REQUEST_TYPE_UPDATE,
+                                                  row)
 
         verified_data.update(verified_config_data)
 
@@ -252,8 +256,8 @@ def verify_patch_data(data, resource, schema, idl):
     return verified_data
 
 
-def verify_config_data(resource, data, schema, request_type,
-                       get_all_errors=False):
+def verify_config_data(data, table_name, schema, request_type,
+                       row=None, get_all_errors=False):
 
     config_keys = resource.keys[OVSDB_SCHEMA_CONFIG]
     reference_keys = resource.keys[OVSDB_SCHEMA_REFERENCE]
@@ -296,6 +300,19 @@ def verify_config_data(resource, data, schema, request_type,
             elif request_type in (REQUEST_TYPE_UPDATE, REQUEST_TYPE_PATCH):
                 if column_name not in non_mutable_attributes:
                     verified_config_data[column_name] = data[column_name]
+                else:
+                    # Check if immutable attribute is being updated
+                    if row is not None:
+                        if is_optional:
+                            column_list = []
+                            column_list.append(data[column_name])
+                            if row.__getattr__(column_name) != column_list:
+                                error = "Attribute list '%s' cannot be modified" % column_name
+                                raise DataValidationFailed(error)
+                        elif row.__getattr__(column_name) != data[column_name]:
+                            error = "Attribute '%s' cannot be modified" % column_name
+                            raise DataValidationFailed(error)
+
         else:
             # PUT ignores immutable attributes, otherwise they are required.
             # If it's a PUT request, and the field is a mutable and mandatory,
