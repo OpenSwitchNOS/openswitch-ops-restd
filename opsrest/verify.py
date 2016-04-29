@@ -280,6 +280,11 @@ def verify_config_data(data, table_name, schema, request_type,
         is_optional = config_keys[column_name].is_optional
 
         if column_name in data:
+            if request_type in (REQUEST_TYPE_UPDATE, REQUEST_TYPE_PATCH) and \
+                    column_name in non_mutable_attributes:
+                error = " '%s' cannot be modified" % column_name
+                raise DataValidationFailed(error)
+
             try:
                 verify_attribute_type(column_name, config_keys[column_name],
                                       data[column_name])
