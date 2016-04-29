@@ -198,90 +198,6 @@ class DynamicCategoryTest (OpsVsiTest):
         info("\n########## End Test to Create Static Route "
              "without 'from' field ##########\n")
 
-    def put_static_route(self):
-        info("\n########## Test to Update Static Route "
-             "##########\n")
-
-        path = self.PATH + "/%s/" % FROM_STATIC \
-            + STATIC_PREFIX.replace("/", HTML_SLASH)
-
-        # Verify data
-        status_code, response_data = execute_request(
-            path, "GET", None, self.SWITCH_IP,
-            xtra_header=self.cookie_header)
-
-        assert status_code == httplib.OK, "Failed to query route"
-        json_data = get_json(response_data)
-        json_data[CONFIG]["metric"] = 1
-
-        status_code, response_data = execute_request(
-            path, "PUT", json.dumps(json_data),
-            self.SWITCH_IP, xtra_header=self.cookie_header)
-
-        assert status_code == httplib.OK, \
-            "Unexpected status code. Received: %s Response data: %s " % \
-            (status_code, response_data)
-        info("### Static route modified ###\n")
-
-        info("\n########## End Test to Update Static Route "
-             "##########\n")
-
-    def patch_static_route(self):
-        info("\n########## Test to Patch Static Route "
-             "##########\n")
-
-        path = self.PATH + "/%s/" % FROM_STATIC\
-            + STATIC_PREFIX.replace("/", HTML_SLASH)
-
-        status_code, response_data = execute_request(
-            path, "GET", None, self.SWITCH_IP,
-            xtra_header=self.cookie_header)
-
-        assert status_code == httplib.OK, "Failed to query route"
-
-        patch = [{"op": "add", "path": "/metric", "value": 1}]
-
-        status_code, response_data = execute_request(
-            path, "PATCH", json.dumps(patch),
-            self.SWITCH_IP, xtra_header=self.cookie_header)
-
-        assert status_code == httplib.NO_CONTENT, \
-            "Unexpected status code. Received: %s Response data: %s " % \
-            (status_code, response_data)
-        info("### Static route modified ###\n")
-
-        info("\n########## End Test to Patch Static Route "
-             "##########\n")
-
-    def put_static_route_to_connected(self):
-        info("\n########## Test to Update Static Route "
-             "##########\n")
-
-        path = self.PATH + "/%s/" % FROM_STATIC \
-            + STATIC_PREFIX.replace("/", HTML_SLASH)
-
-        # Verify data
-        status_code, response_data = execute_request(
-            path, "GET", None, self.SWITCH_IP,
-            xtra_header=self.cookie_header)
-
-        assert status_code == httplib.OK, "Failed to query route"
-        json_data = get_json(response_data)
-        json_data[CONFIG]["metric"] = 1
-        json_data[CONFIG]["from"] = "connected"
-
-        status_code, response_data = execute_request(
-            path, "PUT", json.dumps(json_data),
-            self.SWITCH_IP, xtra_header=self.cookie_header)
-
-        assert status_code == httplib.BAD_REQUEST, \
-            "Unexpected status code. Received: %s Response data: %s " % \
-            (status_code, response_data)
-        info("### Static route not modified ###\n")
-
-        info("\n########## End Test to Update Static Route "
-             "##########\n")
-
     def post_connected_route(self):
         info("\n########## Test Create Connected Route ##########\n")
         data = deepcopy(base_route_data)
@@ -340,11 +256,6 @@ class DynamicCategoryTest (OpsVsiTest):
         info("\n########## End Test Verify Connected Route Categories "
              "##########\n")
 
-disable_dynamic = pytest.mark.skipif(True, reason=""
-                                     "Disable test until Bug TG-296"
-                                     "is merged. "
-                                     "PUT ignores immutable fields")
-
 
 class Test_DynamicCategory:
     def setup(self):
@@ -376,19 +287,6 @@ class Test_DynamicCategory:
 
     def test_call_post_static_route_remove_from_field(self, netop_login):
         self.test_var.post_static_route_remove_from_field()
-
-    def test_call_put_static_route(self, netop_login,
-                                   create_static_route):
-        self.test_var.put_static_route()
-
-    def test_call_patch_static_route(self, netop_login,
-                                     create_static_route):
-        self.test_var.patch_static_route()
-
-    @disable_dynamic
-    def test_call_put_static_route_to_connected(self, netop_login,
-                                                create_static_route):
-        self.test_var.put_static_route_to_connected()
 
     def test_call_post_connected_route(self, netop_login):
         self.test_var.post_connected_route()
