@@ -140,7 +140,8 @@ def verify_post_data(data, resource, schema, idl):
         verified_config_data = verify_config_data(_data,
                                                   resource.next.table,
                                                   schema,
-                                                  REQUEST_TYPE_CREATE)
+                                                  REQUEST_TYPE_CREATE,
+                                                  None)
 
         verified_data.update(verified_config_data)
 
@@ -168,7 +169,8 @@ def verify_post_data(data, resource, schema, idl):
             references = schema.ovs_tables[resource.next.table].references
             for key, value in references.iteritems():
                 if value.relation == 'parent':
-                    verified_data.update({key: resource})
+                    parent_row = idl.tables[resource.table].rows[resource.row]
+                    verified_data.update({key: parent_row})
 
     except DataValidationFailed as e:
         raise e
@@ -190,13 +192,17 @@ def verify_put_data(data, resource, schema, idl):
     else:
         resource_verify = resource.next
 
+    # Get the targeted row
+    row = idl.tables[resource_verify.table].rows[resource_verify.row]
+
     # verify config and reference columns data
     verified_data = {}
     try:
         verified_config_data = verify_config_data(_data,
                                                   resource_verify.table,
                                                   schema,
-                                                  REQUEST_TYPE_UPDATE)
+                                                  REQUEST_TYPE_UPDATE,
+                                                  row)
 
         verified_data.update(verified_config_data)
 
@@ -235,7 +241,8 @@ def verify_patch_data(data, resource, schema, idl):
     try:
         verified_config_data = verify_config_data(data,
                                                   resource_verify.table,
-                                                  schema, REQUEST_TYPE_PATCH)
+                                                  schema, REQUEST_TYPE_PATCH,
+                                                  None)
 
         verified_data.update(verified_config_data)
 
@@ -252,7 +259,7 @@ def verify_patch_data(data, resource, schema, idl):
 
 
 def verify_config_data(data, table_name, schema, request_type,
-                       get_all_errors=False):
+                       row, get_all_errors=False):
 
     config_keys = schema.ovs_tables[table_name].config
     reference_keys = schema.ovs_tables[table_name].references
@@ -295,6 +302,10 @@ def verify_config_data(data, table_name, schema, request_type,
             elif request_type in (REQUEST_TYPE_UPDATE, REQUEST_TYPE_PATCH):
                 if column_name not in non_mutable_attributes:
                     verified_config_data[column_name] = data[column_name]
+                else:
+                    if row is not None and row.__getattr__(column_name) != data[column_name]:
+                        error = "Attribute '%s' cannot be modified" % column_name
+                        raise DataValidationFailed(error)
         else:
             # PUT ignores immutable attributes, otherwise they are required.
             # If it's a PUT request, and the field is a mutable and mandatory,
