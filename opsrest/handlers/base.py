@@ -18,6 +18,7 @@ import rbac
 import httplib
 import hashlib
 import json
+import traceback
 
 from tornado import web
 from tornado import gen
@@ -94,10 +95,12 @@ class BaseHandler(web.RequestHandler):
                     raise DataValidationFailed("Content-Length too long")
 
         except APIException as e:
+            app_log.debug(traceback.format_exc())
             self.on_exception(e)
             self.finish()
 
         except Exception, e:
+            app_log.debug(traceback.format_exc())
             self.on_exception(e)
             self.finish()
 
@@ -114,6 +117,7 @@ class BaseHandler(web.RequestHandler):
         # uncaught exceptions
         if not isinstance(e, APIException):
             app_log.debug("Caught unexpected exception:\n%s" % e)
+            app_log.debug(traceback.format_exc())
             self.set_status(httplib.INTERNAL_SERVER_ERROR)
         elif isinstance(e, NotAuthenticated) or \
                 isinstance(e, AuthenticationFailed):
@@ -122,6 +126,7 @@ class BaseHandler(web.RequestHandler):
             self.set_status(e.status_code)
         else:
             app_log.debug("Caught APIException:\n%s" % e)
+            app_log.debug(traceback.format_exc())
             self.set_status(e.status_code)
 
         self.set_header(HTTP_HEADER_CONTENT_TYPE, HTTP_CONTENT_TYPE_JSON)
