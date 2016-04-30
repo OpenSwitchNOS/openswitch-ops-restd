@@ -65,6 +65,10 @@ OVSDB_SCHEMA_REFERENCED_BY = 'referenced_by'
 # schema common columns which do not require keys to be validated
 OVSDB_COMMON_COLUMNS = ['other_config', 'external_ids']
 
+# Allowed categories
+VALID_CATEGORIES = [OVSDB_SCHEMA_CONFIG, OVSDB_SCHEMA_STATS,
+                    OVSDB_SCHEMA_STATUS]
+
 # HTTP Protocol and Secure HTTP protocol
 HTTP = 'http'
 HTTPS = 'https'
