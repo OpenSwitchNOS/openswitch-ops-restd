@@ -47,6 +47,8 @@ def patch_resource(data, resource, schema, txn, idl, uri):
             resource = resource.next
         resource_update = resource.next
 
+    utils.update_resource_keys(resource_update, schema, idl)
+
     if resource_update is None or resource_update.row is None or \
             verify.verify_http_method(resource, schema,
                                       REQUEST_TYPE_PATCH) is False:
@@ -191,7 +193,8 @@ def apply_patch(patch, row_json, resource_update=None, schema=None):
 
     if resource_update is not None and schema is not None:
         app_log.debug("Post-patch pre-hack row_json -> %s" % patched_row_json)
-        # TODO remove this ugly hack after fix in GET behavior is merged (bug #127)
+        # TODO remove this ugly hack after fix in GET behavior is merged
+        # (bug #127)
         patched_row_json = remove_empty_optional_columns_hack(schema,
                                                               resource_update,
                                                               patched_row_json)
