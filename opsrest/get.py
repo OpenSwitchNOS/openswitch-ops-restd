@@ -16,7 +16,6 @@ from opsrest.constants import *
 from opsrest.utils import utils
 from opsrest.utils import getutils
 from opsrest import verify
-from opsrest.exceptions import NotFound
 
 import httplib
 import types
@@ -35,9 +34,23 @@ def get_resource(idl, resource, schema, uri=None,
     if resource is None:
         return None
 
+    # We want to get System table
+    if resource.next is None:
+        resource_query = resource
+    else:
+        while True:
+            if resource.next.next is None:
+                break
+            resource = resource.next
+        resource_query = resource.next
+
+    utils.update_resource_keys(resource_query, schema, idl)
+
+    if verify.verify_http_method(resource, schema, "GET") is False:
+        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
+
     # GET on System table
     if resource.next is None:
-
         if query_arguments is not None:
             validation_result = \
                 getutils.validate_non_plural_query_args(query_arguments)
@@ -47,20 +60,10 @@ def get_resource(idl, resource, schema, uri=None,
 
         return get_row_json(resource.row, resource.table, schema,
                             idl, uri, selector, depth)
-
-    # All other cases
-
-    # get the last resource pair
-    while True:
-        if resource.next.next is None:
-            break
-        resource = resource.next
-
-    if verify.verify_http_method(resource, schema, "GET") is False:
-        raise Exception({'status': httplib.METHOD_NOT_ALLOWED})
-
-    return get_resource_from_db(resource, schema, idl, uri,
-                                selector, query_arguments, depth)
+    else:
+        # Other tables
+        return get_resource_from_db(resource, schema, idl, uri,
+                                    selector, query_arguments, depth)
 
 
 # get resource from db using resource->next_resource pair
@@ -70,7 +73,6 @@ def get_resource_from_db(resource, schema, idl, uri=None,
 
     resource_result = None
     uri = _get_uri(resource, schema, uri)
-    table = None
 
     # Determine if result will be a collection or a single
     # resource, plus the table to use in post processing
@@ -89,8 +91,7 @@ def get_resource_from_db(resource, schema, idl, uri=None,
                                                      keys_args,
                                                      query_arguments,
                                                      schema, resource.next,
-                                                     selector, depth,
-                                                     is_collection)
+                                                     depth, is_collection)
     if ERROR in validation_result:
         return validation_result
 
@@ -121,8 +122,7 @@ def get_resource_from_db(resource, schema, idl, uri=None,
                                                          filter_args, offset,
                                                          limit, keys_args,
                                                          schema, table,
-                                                         selector,
-                                                         categorize=True)
+                                                         categorized=True)
 
     return resource_result
 
@@ -153,42 +153,56 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
     depth_counter += 1
     db_table = idl.tables[table]
     db_row = db_table.rows[row]
-    schema_table = schema.ovs_tables[table]
+    table_schema = schema.ovs_tables[table]
+
+    keys = {}
+    keys[OVSDB_SCHEMA_CONFIG] = table_schema.config
+    keys[OVSDB_SCHEMA_STATS] = table_schema.stats
+    keys[OVSDB_SCHEMA_STATUS] = table_schema.status
+    keys[OVSDB_SCHEMA_REFERENCE] = table_schema.references
+
+    if table_schema.dynamic:
+        keys = utils.update_category_keys(keys, db_row,
+                                          idl, schema,
+                                          table)
 
     config_keys = {}
     config_data = {}
     if selector is None or selector == OVSDB_SCHEMA_CONFIG:
-        config_keys = schema_table.config
+        config_keys = keys[OVSDB_SCHEMA_CONFIG]
         config_data = utils.row_to_json(db_row, config_keys)
+
     # To remove the unnecessary empty values from the config data
     config_data = {key: config_data[key] for key in config_keys
-                   if not(config_data[key] == None or
-                   config_data[key] == {} or config_data[key] == [])}
+                   if not getutils.is_empty_value(config_data[key])}
 
     stats_keys = {}
     stats_data = {}
     if selector is None or selector == OVSDB_SCHEMA_STATS:
-        stats_keys = schema_table.stats
+        stats_keys = keys[OVSDB_SCHEMA_STATS]
         stats_data = utils.row_to_json(db_row, stats_keys)
+
     # To remove all the empty columns from the satistics data
     stats_data = {key: stats_data[key] for key in stats_keys
-                  if stats_data[key]}
+                  if not getutils.is_empty_value(stats_data[key])}
 
     status_keys = {}
     status_data = {}
     if selector is None or selector == OVSDB_SCHEMA_STATUS:
-        status_keys = schema_table.status
+        status_keys = keys[OVSDB_SCHEMA_STATUS]
         status_data = utils.row_to_json(db_row, status_keys)
+
     # To remove all the empty columns from the status data
     status_data = {key: status_data[key] for key in status_keys
-                   if status_data[key]}
+                   if not getutils.is_empty_value(status_data[key])}
 
-    references = schema_table.references
+    # Categorize references
+    references = keys[OVSDB_SCHEMA_REFERENCE]
     reference_data = []
     for key in references:
         # Ignore parent column in case of back references as we
         # already are in the child table whose row we need to fetch
-        if references[key].ref_table == schema_table.parent:
+        if references[key].ref_table == table_schema.parent:
             continue
 
         if (depth_counter >= depth):
@@ -205,22 +219,20 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
 
         reference_data = temp
 
-        # depending upon the category of reference
-        # pair them with the right data set
+        # Depending upon the category of the
+        # reference pair them with the right data set
         category = references[key].category
 
-        if config_keys and category == OVSDB_SCHEMA_CONFIG:
+        if category == OVSDB_SCHEMA_CONFIG:
             config_data.update({key: reference_data})
 
-        elif stats_keys and category == OVSDB_SCHEMA_STATS:
-            stats_data.update({key: reference_data})
-
-        elif status_keys and category == OVSDB_SCHEMA_STATUS:
+        elif category == OVSDB_SCHEMA_STATUS:
             status_data.update({key: reference_data})
 
-    # TODO Data categorization should be refactored as it
-    # is also executed when sorting and filtering results
+        elif category == OVSDB_SCHEMA_STATS:
+            stats_data.update({key: reference_data})
 
+    # Categorize by selector
     data = getutils._categorize_by_selector(config_data, stats_data,
                                             status_data, selector)
 
@@ -309,10 +321,10 @@ def get_column_json(column, row, table, schema, idl, uri,
 
 def _get_referenced_row(schema, table, row, column, column_row, idl):
 
-    schema_table = schema.ovs_tables[table]
+    table_schema = schema.ovs_tables[table]
 
     # Set correct row for kv_type references
-    if schema_table.references[column].kv_type:
+    if table_schema.references[column].kv_type:
         db_table = idl.tables[table]
         db_row = db_table.rows[row]
         db_col = db_row.__getattr__(column)
@@ -349,7 +361,7 @@ def get_back_references_json(parent_row, parent_table, table,
         for row in idl.tables[table].rows.itervalues():
             ref = row.__getattr__(_refCol)
             if ref.uuid == parent_row:
-                json_row = get_row_json(row.uuid, _refCol, schema, idl, uri,
+                json_row = get_row_json(row.uuid, table, schema, idl, uri,
                                         selector, depth)
                 resources_list.append(json_row)
 

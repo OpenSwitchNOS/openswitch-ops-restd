@@ -1,4 +1,4 @@
-# Copyright (C) 2015 Hewlett Packard Enterprise Development LP
+# Copyright (C) 2015-2016 Hewlett Packard Enterprise Development LP
 #
 #  Licensed under the Apache License, Version 2.0 (the "License"); you may
 #  not use this file except in compliance with the License. You may obtain
@@ -12,7 +12,6 @@
 #  License for the specific language governing permissions and limitations
 #  under the License.
 
-import json
 import ovs.db.idl
 import ovs
 import ovs.db.types as ovs_types
@@ -25,6 +24,7 @@ from opsrest.resource import Resource
 from opsrest.constants import *
 from opsvalidator import validator
 from tornado.log import app_log
+from copy import deepcopy
 
 
 def get_row_from_resource(resource, idl):
@@ -275,11 +275,11 @@ def setup_new_row(resource, data, schema, txn, idl):
     resource.row = row.uuid
 
     # add config items
-    config_keys = schema.ovs_tables[resource.table].config
+    config_keys = resource.keys[OVSDB_SCHEMA_CONFIG]
     set_config_fields(row, data, config_keys)
 
     # add reference iitems
-    reference_keys = schema.ovs_tables[resource.table].references.keys()
+    reference_keys = resource.keys[OVSDB_SCHEMA_REFERENCE].keys()
     set_reference_items(row, data, reference_keys)
 
     return row
@@ -298,11 +298,11 @@ def update_row(resource, data, schema, txn, idl):
     row = get_row_from_resource(resource, idl)
 
     #Update config items
-    config_keys = schema.ovs_tables[resource.table].config
+    config_keys = resource.keys[OVSDB_SCHEMA_CONFIG]
     set_config_fields(row, data, config_keys)
 
     # add or modify reference items (Overwrite references)
-    reference_keys = schema.ovs_tables[resource.table].references.keys()
+    reference_keys = resource.keys[OVSDB_SCHEMA_REFERENCE].keys()
     set_reference_items(row, data, reference_keys)
 
     return row
@@ -325,7 +325,6 @@ def set_reference_items(row, data, reference_keys):
     """
     for key in reference_keys:
         if key in data:
-            app_log.debug("Adding Reference, the key is %s" % key)
             if isinstance(data[key], ovs.db.idl.Row):
                 row.__setattr__(key, data[key])
             elif type(data[key]) is types.ListType:
@@ -728,7 +727,7 @@ def get_table_key(row, table_name, schema, idl, forward_ref=True):
         cur_table = schema.ovs_tables[cur_table_name]
         if cur_table.references[column_ref].kv_type:
             parent_row, key = get_parent_row(cur_table_name,
-                                            row, column_ref, schema, idl)
+                                             row, column_ref, schema, idl)
             key_list.append(str(key))
             return key_list
 
@@ -753,7 +752,6 @@ def exec_validators_with_resource(idl, schema, resource, http_method):
     if resource.next is not None:
         p_table_name = resource.table
         p_row = idl.tables[p_table_name].rows[resource.row]
-
         child_resource = resource.next
 
     table_name = child_resource.table
@@ -770,3 +768,114 @@ def redirect_http_to_https(current_instance):
         return True
 
     return False
+
+
+def update_category_keys(keys, row, idl, schema, table):
+    """
+    Update the keys categories for a given resource
+    Parameters:
+        -keys: dictionary of key columns
+        (configuration,status,statistics, references)
+        -row: ovs.db.idl.Row or dict object if it's new data
+        -schema: RestSchema
+        -idl: Idl instance
+        -table: table name
+    """
+    if row is None \
+            or not isinstance(row, (ovs.db.idl.Row, dict)):
+        app_log.debug("No row or data to process")
+        return keys
+
+    # Process dynamic columns
+    if isinstance(row, ovs.db.idl.Row)\
+            and idl is None or schema is None:
+        app_log.debug("Resource, Idl or schema is None")
+        return keys
+
+    ovs_table = schema.ovs_tables[table]
+    if not ovs_table.dynamic:
+        app_log.debug("Nothing to do the table doesn't "
+                      "have dynamic columns")
+        return keys
+
+    result_keys = deepcopy(keys)
+
+    # Get all columns
+    columns = {}
+    columns.update(result_keys[OVSDB_SCHEMA_CONFIG])
+    columns.update(result_keys[OVSDB_SCHEMA_STATUS])
+    columns.update(result_keys[OVSDB_SCHEMA_STATS])
+    references = result_keys[OVSDB_SCHEMA_REFERENCE]
+
+    dynamic_columns = ovs_table.dynamic
+    for column_name, category_obj in dynamic_columns.iteritems():
+        # Store the column used to get the category value
+        if category_obj.follows is not None:
+            source_column = category_obj.follows
+        elif category_obj.per_value is not None:
+            source_column = column_name
+
+        column_data = None
+        # Get column data from follows/per_value
+        if isinstance(row, ovs.db.idl.Row):
+            column_data = get_column_data_from_row(row, source_column)
+        elif isinstance(row, dict):
+            if source_column in row:
+                column_data = row[source_column]
+            else:
+                # Nothing to do, there isn't source column to
+                # take decision
+                continue
+
+        # Set the new category
+        # Get new category for that value using per-value data
+        new_category = \
+            columns[source_column].category.per_value[column_data]
+
+        # Store old category
+        if column_name in references:
+            prev_category = references[column_name].category.value
+        else:
+            prev_category = columns[column_name].category.value
+
+        # Check if the category changed
+        if prev_category != new_category:
+            if column_name in columns:
+                orig_columns = result_keys[prev_category]
+                dest_columns = result_keys[new_category]
+                # Change the category
+                column = orig_columns[column_name]
+                column.category.value = new_category
+                dest_columns[column_name] = column
+                orig_columns.pop(column_name)
+
+            # If the column is at references change the category
+            if column_name in references:
+                reference = references[column_name]
+                reference.category.value = new_category
+
+    # Debugging
+    app_log.debug("Table: %s" % table)
+    app_log.debug("Keys: \n %s \n" % result_keys)
+    return result_keys
+
+
+def update_resource_keys(resource, schema, idl, data=None):
+    """
+    Update the keys categories for a given resource
+
+    Parameters:
+        resource: opsrest.Resource instance
+        schema: RestSchema
+        idl: Idl instance
+        data: json data given if the resource is new and doesn't
+             have a row.
+    """
+    row = None
+    if data is not None:
+        row = data
+    elif resource.row:
+        row = get_row_from_resource(resource, idl)
+
+    resource.keys = update_category_keys(resource.keys, row, idl,
+                                         schema, resource.table)
