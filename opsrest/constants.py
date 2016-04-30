@@ -62,6 +62,7 @@ OVSDB_SCHEMA_PARENT = 'parent'
 OVSDB_SCHEMA_BACK_REFERENCE = 'back'
 OVSDB_BASE_URI = REST_VERSION_PATH + OVSDB_SCHEMA_SYSTEM_URI + '/'
 OVSDB_SCHEMA_REFERENCED_BY = 'referenced_by'
+OVSDB_CATEGORIES = [OVSDB_SCHEMA_CONFIG, OVSDB_SCHEMA_STATS, OVSDB_SCHEMA_STATUS]
 # schema common columns which do not require keys to be validated
 OVSDB_COMMON_COLUMNS = ['other_config', 'external_ids']
 
