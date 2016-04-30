@@ -43,13 +43,12 @@ def verify_http_method(resource, schema, http_method):
         else:
             return False
 
-    parent_schema = schema.ovs_tables[resource.table]
-    resource_schema = schema.ovs_tables[resource.next.table]
-    is_root = resource_schema.is_root
-    resource_indexes = resource_schema.indexes
-    resource_config = resource_schema.config
-    resource_refs = resource_schema.references
-    parent_refs = parent_schema.references
+    resource_table = schema.ovs_tables[resource.next.table]
+    is_root = resource_table.is_root
+    resource_indexes = resource_table.indexes
+    resource_config = resource.next.keys[OVSDB_SCHEMA_CONFIG]
+    resource_refs = resource.next.keys[OVSDB_SCHEMA_REFERENCE]
+    parent_refs = resource.keys[OVSDB_SCHEMA_REFERENCE]
 
     # look for config references
     resource_config_refs = []
@@ -121,14 +120,14 @@ def verify_post_data(data, resource, schema, idl):
     # the configuration data must contain the 'keyname' used to
     # identify the reference of the new resource created.
     if resource.relation is OVSDB_SCHEMA_CHILD:
-        ref = schema.ovs_tables[resource.table].references[resource.column]
+        ref = resource.keys[OVSDB_SCHEMA_REFERENCE][resource.column]
         reference = ref
         if reference.kv_type:
             keyname = reference.column.keyname
             if keyname not in _data:
                 error = "Missing keyname attribute to" +\
-                         " reference the new resource" +\
-                         " from the parent"
+                        " reference the new resource" +\
+                        " from the parent"
 
                 raise DataValidationFailed(error)
             else:
@@ -137,8 +136,8 @@ def verify_post_data(data, resource, schema, idl):
 
     try:
         # verify configuration data, add it to verified data
-        verified_config_data = verify_config_data(_data,
-                                                  resource.next.table,
+        verified_config_data = verify_config_data(resource.next,
+                                                  _data,
                                                   schema,
                                                   REQUEST_TYPE_CREATE)
 
@@ -165,7 +164,7 @@ def verify_post_data(data, resource, schema, idl):
             verified_data.update(verified_referenced_by_data)
 
         elif resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
-            references = schema.ovs_tables[resource.next.table].references
+            references = resource.next.keys[OVSDB_SCHEMA_REFERENCE]
             for key, value in references.iteritems():
                 if value.relation == 'parent':
                     parent_row = idl.tables[resource.table].rows[resource.row]
@@ -194,8 +193,8 @@ def verify_put_data(data, resource, schema, idl):
     # verify config and reference columns data
     verified_data = {}
     try:
-        verified_config_data = verify_config_data(_data,
-                                                  resource_verify.table,
+        verified_config_data = verify_config_data(resource_verify,
+                                                  _data,
                                                   schema,
                                                   REQUEST_TYPE_UPDATE)
 
@@ -234,9 +233,10 @@ def verify_patch_data(data, resource, schema, idl):
     # verify config and reference columns data
     verified_data = {}
     try:
-        verified_config_data = verify_config_data(data,
-                                                  resource_verify.table,
-                                                  schema, REQUEST_TYPE_PATCH)
+        verified_config_data = verify_config_data(resource_verify,
+                                                  data,
+                                                  schema,
+                                                  REQUEST_TYPE_PATCH)
 
         verified_data.update(verified_config_data)
 
@@ -252,11 +252,11 @@ def verify_patch_data(data, resource, schema, idl):
     return verified_data
 
 
-def verify_config_data(data, table_name, schema, request_type,
+def verify_config_data(resource, data, schema, request_type,
                        get_all_errors=False):
 
-    config_keys = schema.ovs_tables[table_name].config
-    reference_keys = schema.ovs_tables[table_name].references
+    config_keys = resource.keys[OVSDB_SCHEMA_CONFIG]
+    reference_keys = resource.keys[OVSDB_SCHEMA_REFERENCE]
 
     verified_config_data = {}
     errors = []
@@ -272,7 +272,7 @@ def verify_config_data(data, table_name, schema, request_type,
         else:
             raise DataValidationFailed(error)
 
-    non_mutable_attributes = get_non_mutable_attributes(table_name,
+    non_mutable_attributes = get_non_mutable_attributes(resource,
                                                         schema)
 
     # Check for all required/valid attributes to be present
@@ -640,7 +640,7 @@ def verify_forward_reference(data, resource, schema, idl):
         schema = restparser schema object
         idl - ovs.db.idl.Idl object
     """
-    reference_keys = schema.ovs_tables[resource.table].references
+    reference_keys = resource.keys[OVSDB_SCHEMA_REFERENCE]
     verified_references = {}
 
     # check for invalid keys
@@ -742,7 +742,7 @@ def verify_referenced_by(data, resource, schema, idl):
             raise DataValidationFailed(error)
 
         # attributes
-        references = schema.ovs_tables[uri_resource.table].references
+        references = uri_resource.keys[OVSDB_SCHEMA_REFERENCE]
         reference_keys = references.keys()
         if attributes is not None and len(attributes) > 0:
             for attribute in attributes:
@@ -788,9 +788,9 @@ def find_unknown_attribute(data, config_keys, reference_keys):
     return None
 
 
-def get_non_mutable_attributes(table_name, schema):
-    config_keys = schema.ovs_tables[table_name].config
-    reference_keys = schema.ovs_tables[table_name].references
+def get_non_mutable_attributes(resource, schema):
+    config_keys = resource.keys[OVSDB_SCHEMA_CONFIG]
+    reference_keys = resource.keys[OVSDB_SCHEMA_REFERENCE]
 
     attribute_keys = {}
     attribute_keys.update(config_keys)
