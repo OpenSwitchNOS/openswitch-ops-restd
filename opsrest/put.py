@@ -19,7 +19,6 @@ from opsrest.transaction import OvsdbTransactionResult
 from opsrest.exceptions import MethodNotAllowed, DataValidationFailed
 from opsvalidator.error import ValidationError
 
-import httplib
 from tornado.log import app_log
 
 
@@ -42,6 +41,8 @@ def put_resource(data, resource, schema, txn, idl):
     app_log.debug("Resource = Table: %s Relation: %s Column: %s"
                   % (resource.table, resource.relation, resource.column))
 
+    utils.update_resource_keys(resource_update, schema, idl)
+
     if resource_update is None or resource_update.row is None or\
             verify.verify_http_method(resource,
                                       schema, REQUEST_TYPE_UPDATE) is False:
@@ -57,7 +58,7 @@ def put_resource(data, resource, schema, txn, idl):
 
     # We want to modify System table
     if resource.next is None:
-        updated_row = utils.update_row(resource, verified_data,
+        updated_row = utils.update_row(resource_update, verified_data,
                                        schema, txn, idl)
 
     elif resource.relation == OVSDB_SCHEMA_CHILD:
