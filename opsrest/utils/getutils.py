@@ -19,8 +19,6 @@ from opsrest.exceptions import DataValidationFailed
 
 import re
 
-from tornado.log import app_log
-
 
 def get_depth_param(query_arguments):
 
@@ -68,10 +66,10 @@ def get_param_list(query_arguments, query_param_name):
     return values
 
 
-def get_valid_key_values(key_values, schema, resource, selector):
+def get_valid_key_values(key_values, schema, resource):
     # Validate schema keys
     valid_key_values = []
-    valid_keys = _get_valid_keys(schema, resource, selector)
+    valid_keys = _get_valid_keys(schema, resource)
 
     for value in key_values:
         if value in valid_keys:
@@ -84,7 +82,7 @@ def get_valid_key_values(key_values, schema, resource, selector):
 
 def validate_query_args(sorting_args, filter_args, pagination_args,
                         keys_args, query_arguments, schema, resource=None,
-                        selector=None, depth=0, is_collection=True):
+                        depth=0, is_collection=True):
 
     # Non-plural resources only required to validate if
     # sort, filter, or pagination parameters are NOT present
@@ -93,9 +91,8 @@ def validate_query_args(sorting_args, filter_args, pagination_args,
 
     # For collection resources, go ahead and
     # validate correctness of all parameters
-
     staging_sort_data = get_sorting_args(query_arguments, schema,
-                                         resource, selector)
+                                         resource)
 
     # get_sorting_args returns a list of column
     # names to sort by or an ERROR dictionary
@@ -106,7 +103,7 @@ def validate_query_args(sorting_args, filter_args, pagination_args,
 
     # specific column retrieval
     staging_keys_data = get_keys_args(query_arguments, schema,
-                                            resource, selector)
+                                      resource)
 
     # get_keys_args returns a list of column
     # names to show or an ERROR dictionary
@@ -118,7 +115,7 @@ def validate_query_args(sorting_args, filter_args, pagination_args,
     # get_filters_args returns a dictionary with
     # either filter->value pairs or an ERROR
     filter_args.update(get_filters_args(query_arguments, schema,
-                                        resource, selector))
+                                        resource))
 
     if ERROR in filter_args:
         return filter_args
@@ -192,19 +189,19 @@ def validate_non_plural_query_args(query_arguments):
         return {}
 
 
-def get_keys_args(query_arguments, schema, resource=None, selector=None):
+def get_keys_args(query_arguments, schema, resource=None):
     keys_values = get_param_list(query_arguments, REST_QUERY_PARAM_KEYS)
 
     valid_keys_values = []
 
     if keys_values:
         valid_keys_values = get_valid_key_values(keys_values, schema,
-                                                    resource, selector)
+                                                 resource)
 
     return valid_keys_values
 
 
-def get_sorting_args(query_arguments, schema, resource=None, selector=None):
+def get_sorting_args(query_arguments, schema, resource=None):
     sorting_values = get_param_list(query_arguments, REST_QUERY_PARAM_SORTING)
 
     valid_sorting_values = []
@@ -230,7 +227,7 @@ def get_sorting_args(query_arguments, schema, resource=None, selector=None):
             sorting_values[0] = value
 
             valid_sorting_values = get_valid_key_values(sorting_values, schema,
-                                                        resource, selector)
+                                                        resource)
 
             if valid_sorting_values:
                 valid_sorting_values.append(order)
@@ -238,48 +235,37 @@ def get_sorting_args(query_arguments, schema, resource=None, selector=None):
     return valid_sorting_values
 
 
-def _get_valid_keys(schema, resource=None, selector=None):
+def _get_valid_keys(schema, resource=None):
     valid_keys = []
 
     # Get valid keys for the ovsdb schema
     if hasattr(schema, "ovs_tables"):
 
-        if selector == OVSDB_SCHEMA_CONFIG or selector is None:
-            valid_keys.extend(schema.ovs_tables[resource.table].config.keys())
+        valid_keys.extend(resource.keys[OVSDB_SCHEMA_CONFIG].keys())
 
-        if selector == OVSDB_SCHEMA_STATUS or selector is None:
-            valid_keys.extend(schema.ovs_tables[resource.table].status.keys())
+        valid_keys.extend(resource.keys[OVSDB_SCHEMA_STATUS].keys())
 
-        if selector == OVSDB_SCHEMA_STATS or selector is None:
-            valid_keys.extend(schema.ovs_tables[resource.table].stats.keys())
+        valid_keys.extend(resource.keys[OVSDB_SCHEMA_STATS].keys())
 
-        references = schema.ovs_tables[resource.table].references
-        references_keys = []
-        if selector is None:
-            references_keys = references.keys()
-        else:
-            for key in references.keys():
-                if selector == references[key].category:
-                    references_keys.append(key)
+        references = resource.keys[OVSDB_SCHEMA_REFERENCE]
+        references_keys = references.keys()
 
         valid_keys.extend(references_keys)
 
     # Get valid keys from standard JSON schema
     else:
         p = 'properties'
-        for category in (OVSDB_SCHEMA_CONFIG, OVSDB_SCHEMA_STATS,
-                         OVSDB_SCHEMA_STATUS):
-            if selector == category or selector is None:
-                if category in schema[p] and p in schema[p][category]:
-                    valid_keys.extend(schema[p][category][p].keys())
+        for category in OVSDB_CATEGORIES:
+            if category in schema[p] and p in schema[p][category]:
+                valid_keys.extend(schema[p][category][p].keys())
 
     return valid_keys
 
 
-def get_filters_args(query_arguments, schema, resource=None, selector=None):
+def get_filters_args(query_arguments, schema, resource=None):
     filters = {}
     if query_arguments is not None:
-        valid_keys = _get_valid_keys(schema, resource, selector)
+        valid_keys = _get_valid_keys(schema, resource)
 
         for key in query_arguments:
             # NOTE any new query keys should be added to this condition
@@ -300,23 +286,18 @@ def get_filters_args(query_arguments, schema, resource=None, selector=None):
 
 
 def post_process_get_data(get_data, sorting_args, filter_args, offset, limit,
-                          keys_args, schema, table=None, selector=None,
-                          categorize=False):
+                          keys_args, schema, table=None,
+                          categorized=False):
 
-    if categorize:
-        # GET results are groupped in status, statistics
-        # and configuration but all keys (per hash) need
-        # to be at the same level in order to process them
-        processed_get_data = flatten_get_data(get_data)
-    else:
-        processed_get_data = get_data
+    processed_get_data = get_data
 
     # TODO this should be moved to where each row is processed
 
     # Filter results if necessary
     if filter_args:
         processed_get_data = \
-            filter_get_results(processed_get_data, filter_args, schema, table)
+            filter_get_results(processed_get_data, filter_args,
+                               schema, table, categorized)
 
     # Sort results if necessary
     if sorting_args:
@@ -324,18 +305,15 @@ def post_process_get_data(get_data, sorting_args, filter_args, offset, limit,
         # indicating if sort should be reversed
         reverse_sort = sorting_args.pop()
         processed_get_data = sort_get_results(processed_get_data,
-                                              sorting_args, reverse_sort)
+                                              sorting_args,
+                                              reverse_sort,
+                                              categorized)
 
-    # Specific column retrieval results if necessary
+    # Specific keys retrieval results if necessary
     if keys_args:
         processed_get_data = remove_unwanted_keys(processed_get_data,
-                                                     keys_args)
-
-    if categorize:
-        # Now that keys have been processed, re-groupped
-        # them in status, statistics, and configuration
-        processed_get_data = categorize_get_data(schema, processed_get_data,
-                                                 table, selector)
+                                                  keys_args,
+                                                  categorized)
 
     # Paginate results if necessary
     processed_get_data = paginate_get_results(processed_get_data,
@@ -344,107 +322,30 @@ def post_process_get_data(get_data, sorting_args, filter_args, offset, limit,
     return processed_get_data
 
 
-def flatten_get_data(data):
-
-    flattened_get_data = []
-
-    for i in range(len(data)):
-        staging_data = {}
-        if OVSDB_SCHEMA_CONFIG in data[i].keys():
-            staging_data.update(data[i][OVSDB_SCHEMA_CONFIG])
-        if OVSDB_SCHEMA_STATS in data[i].keys():
-            staging_data.update(data[i][OVSDB_SCHEMA_STATS])
-        if OVSDB_SCHEMA_STATUS in data[i].keys():
-            staging_data.update(data[i][OVSDB_SCHEMA_STATUS])
-        flattened_get_data.append(staging_data)
-
-    return flattened_get_data
-
-
-def categorize_get_data(schema, data, table=None, selector=None):
-
-    config_keys = []
-    stats_keys = []
-    status_keys = []
-
-    # Process keys from OVSDB schema
-    if hasattr(schema, "ovs_tables"):
-        config_keys = schema.ovs_tables[table].config.keys()
-        stats_keys = schema.ovs_tables[table].stats.keys()
-        status_keys = schema.ovs_tables[table].status.keys()
-        reference_keys = schema.ovs_tables[table].references
-
-        for key in reference_keys:
-            # depending upon the category of reference
-            # pair them with the right data set
-            category = reference_keys[key].category
-            if category == OVSDB_SCHEMA_CONFIG:
-                config_keys.append(key)
-            elif category == OVSDB_SCHEMA_STATUS:
-                status_keys.append(key)
-            elif category == OVSDB_SCHEMA_STATS:
-                stats_keys.append(key)
-    else:
-        p = 'properties'
-
-        if OVSDB_SCHEMA_CONFIG in schema[p] and \
-                p in schema[p][OVSDB_SCHEMA_CONFIG]:
-            for key in schema[p][OVSDB_SCHEMA_CONFIG][p]:
-                config_keys.append(key)
-
-        if OVSDB_SCHEMA_STATS in schema[p] and \
-                p in schema[p][OVSDB_SCHEMA_STATS]:
-            for key in schema[p][OVSDB_SCHEMA_STATS][p]:
-                stats_keys.append(key)
-
-        if OVSDB_SCHEMA_STATUS in schema[p] and \
-                p in schema[p][OVSDB_SCHEMA_STATUS]:
-            for key in schema[p][OVSDB_SCHEMA_STATUS][p]:
-                status_keys.append(key)
-
-    categorized_data = []
-
-    for i in range(len(data)):
-
-        stats_data = {}
-        status_data = {}
-        config_data = {}
-
-        for key in config_keys:
-            if key in data[i]:
-                config_data[key] = data[i][key]
-
-        for key in stats_keys:
-            if key in data[i]:
-                stats_data[key] = data[i][key]
-
-        for key in status_keys:
-            if key in data[i]:
-                status_data[key] = data[i][key]
-
-        staging_data = _categorize_by_selector(config_data, stats_data,
-                                               status_data, selector)
-
-        categorized_data.append(staging_data)
-
-    return categorized_data
-
-
-def filter_get_results(get_data, filters, schema, table=None):
+def filter_get_results(get_data, filters, schema, table=None,
+                       categorized=False):
     filtered_data = []
-
     for element in get_data:
         valid = True
         for key in filters:
-            if key in element:
-
+            value = None
+            if categorized:
+                for category in OVSDB_CATEGORIES:
+                    if category in element \
+                       and key in element[category]:
+                        value = element[category][key]
+                        break
+            else:
+                if key in element:
+                    value = element[key]
+            if value:
                 column_type = _get_column_type(key, schema, table)
                 filter_set = _process_filters(filters[key], column_type)
 
-                if type(element[key]) is list:
-                    value_set = set(element[key])
+                if type(value) is list:
+                    value_set = set(value)
                 else:
-                    value_set = set([element[key]])
+                    value_set = set([value])
 
                 if filter_set.difference(value_set) == filter_set:
                     valid = False
@@ -512,40 +413,60 @@ def _process_filters(filters, column_type):
     return filter_set
 
 
-def process_sort_value(item, key):
-    if key in item:
-        value = item[key]
+def process_sort_value(item, key, categorized):
+    value = None
+    if categorized:
+        for category in OVSDB_CATEGORIES:
+            if category in item and key in item[category]:
+                value = item[category][key]
+                break
+    else:
+        if key in item:
+            value = item[key]
+    if value is not None:
         if isinstance(value, str):
             value = value.lower()
-    else:
-        # We might in the future need to change this to
-        # process the value's type accordingly, but sort
-        # is currently done ascii-wise so this should be ok.
-        value = ""
-
+        else:
+            # We might in the future need to change this to
+            # process the value's type accordingly, but sort
+            # is currently done ascii-wise so this should be ok.
+            value = ""
     return value
 
 
-def sort_get_results(get_data, sort_by_columns, reverse_=False):
+def sort_get_results(get_data, sort_by_columns, reverse_=False,
+                     categorized=False):
 
     # The lambda function returns a tuple with the comparable
     # values of each column, so that sorted() use them as the
     # compare keys for dictionaries in the GET results
-
     sorted_data = sorted(
         get_data,
-        key=lambda item: tuple(process_sort_value(item, k)
+        key=lambda item: tuple(process_sort_value(item, k,
+                                                  categorized)
                                for k in sort_by_columns),
         reverse=reverse_)
 
     return sorted_data
 
 
-def remove_unwanted_keys(get_data, retrieve_by_keys):
+def remove_unwanted_keys(get_data, retrieve_by_keys, categorized=False):
     for row in get_data:
-        keys_to_remove = list(set(row) - set(retrieve_by_keys))
+        row_keys = []
+        if categorized:
+            for category in OVSDB_CATEGORIES:
+                if category in row:
+                    row_keys.extend(row[category].keys())
+        else:
+            row_keys = row.keys()
+        keys_to_remove = list(set(row_keys) - set(retrieve_by_keys))
         for key in keys_to_remove:
-            row.pop(key)
+            if categorized:
+                for category in OVSDB_CATEGORIES:
+                    if category in row and key in row[category]:
+                        row[category].pop(key)
+            else:
+                row.pop(key)
     return get_data
 
 
@@ -600,3 +521,7 @@ def _categorize_by_selector(config_data, stats_data, status_data, selector):
                 stats_data, OVSDB_SCHEMA_STATUS: status_data}
 
     return data
+
+
+def is_empty_value(value):
+    return value is None or value == {} or value == []
