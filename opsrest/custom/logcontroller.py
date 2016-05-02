@@ -46,7 +46,7 @@ JOURNALCTL_CMD = "journalctl"
 OUTPUT_FORMAT = "--output=json"
 REVERSE_RECENT_ENTRIES = "-r"
 NEWEST_ENTRY = 0
-TRUNCATE_ENTRIES = 1000
+TRUNCATE_ENTRIES = "-n1000"
 MAXLIMIT = 10000
 DATETIME_REGEX = '\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d'
 MAXPRIORITY = 7
@@ -134,7 +134,7 @@ class LogController(BaseController):
             if not(limit.isdigit() and int(limit) > 0 and
                    int(limit) <= MAXLIMIT):
                 error_messages.append("Valid range for limit is from 1 to" +
-                                      "1000")
+                                      "10000")
 
         priority = getutils.get_query_arg(REST_LOGS_PARAM_PRIORITY_OPTION,
                                           query_args)
@@ -171,6 +171,9 @@ class LogController(BaseController):
     def get_log_cmd_options(self, query_args):
         log_cmd_options = [JOURNALCTL_CMD]
         log_cmd_options.append(REVERSE_RECENT_ENTRIES)
+
+        if REST_QUERY_PARAM_LIMIT not in query_args:
+            log_cmd_options.append(TRUNCATE_ENTRIES)
         if query_args:
             for k, v in query_args.iteritems():
                 if k not in self.FILTER_KEYWORDS[LOGS_PAGINATION]:
@@ -189,10 +192,15 @@ class LogController(BaseController):
     @staticmethod
     def handle_after_cursor(query_args):
         params = ['i', 'b', 'm', 't', 'x']
-        for p in params:
-            arg = ';' + p + '=' + str(getutils.get_query_arg(p, query_args))
-            del query_args[p]
-            query_args[REST_LOGS_PARAM_AFTER_CURSOR][0] += arg
+        if params[0] in query_args and params[1] in query_args and \
+                params[0] in query_args and params[1] in query_args:
+            for p in params:
+                arg = ';' + p + '=' + str(getutils.get_query_arg(p, query_args))
+                del query_args[p]
+                query_args[REST_LOGS_PARAM_AFTER_CURSOR][0] += arg
+        else:
+            tmp = query_args[REST_LOGS_PARAM_AFTER_CURSOR][0]
+            query_args[REST_LOGS_PARAM_AFTER_CURSOR][0] = tmp.strip("'")
 
         return query_args
 
@@ -222,11 +230,12 @@ class LogController(BaseController):
                              query_args))
             else:
                 offset = NEWEST_ENTRY
+
             if REST_QUERY_PARAM_LIMIT in query_args:
                 limit = int(getutils.get_query_arg(REST_QUERY_PARAM_LIMIT,
                             query_args))
             else:
-                limit = TRUNCATE_ENTRIES
+                limit = None
 
             if offset is not None or limit is not None:
                 response = getutils.paginate_get_results(response,
