@@ -251,6 +251,7 @@ def delete_all_references(resource, schema, idl):
                     #delete the reference on that row and column
                     delete_row_reference(reflist, row, row_ref, column_name)
 
+    return row
 
 def delete_row_reference(reflist, row, row_ref, column):
     updated_list = []
@@ -547,6 +548,30 @@ def kv_index_to_row(index_values, parent, idl):
             return value
 
     return None
+
+
+def create_index(schema, data, resource, row):
+    index = None
+    table = resource.next.table
+    restschema = schema.ovs_tables[table]
+
+    indexes = restschema.indexes
+    if len(indexes) == 1 and indexes[0] == "uuid":
+        if resource.relation == OVSDB_SCHEMA_CHILD:
+            ref = schema.ovs_tables[resource.table].references[resource.column]
+            if ref.kv_type:
+                keyname = ref.column.keyname
+                index = data[str(keyname)]
+            else:
+                index = row.uuid
+    elif len(indexes) == 1:
+        index = data[indexes[0]]
+    else:
+        tmp = []
+        for item in indexes:
+            tmp.append(urllib.quote(str(data[item]), safe=''))
+        index = "/".join(tmp)
+    return str(index)
 
 
 def row_to_index(row, table, restschema, idl, parent_row=None):

@@ -61,7 +61,14 @@ def delete_resource(resource, schema, txn, idl):
         row.delete()
 
     elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
-        utils.delete_all_references(resource.next, schema, idl)
+        row = utils.delete_all_references(resource.next, schema, idl)
+
+        # Check if the table is a top-level root table that is not referenced
+        # and explicitly delete.
+        resource_table = resource.next.table
+        if resource_table not in schema.reference_map.values():
+            if schema.ovs_tables[resource_table].is_root:
+                row.delete()
 
     result = txn.commit()
     return OvsdbTransactionResult(result)

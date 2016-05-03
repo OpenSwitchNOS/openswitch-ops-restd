@@ -39,7 +39,15 @@ REST_QUERY_PARAM_SORTING = 'sort'
 REST_QUERY_PARAM_OFFSET = 'offset'
 REST_QUERY_PARAM_LIMIT = 'limit'
 REST_QUERY_PARAM_DEPTH = "depth"
-REST_QUERY_PARAM_COLUMNS = 'columns'
+REST_QUERY_PARAM_KEYS = 'keys'
+
+# Recursive GET argument depth max value
+# Set to 10 to prevent a stack overflow
+DEPTH_MIN_VALUE = 0
+DEPTH_MAX_VALUE = 10
+
+# Set to 1MB to avoid idl overload
+MAX_BODY_SIZE = 1000000
 
 # Ovsdb schema constants
 OVSDB_SCHEMA_SYSTEM_TABLE = 'System'
@@ -66,6 +74,7 @@ HTTP_HEADER_LINK = 'Link'
 HTTP_HEADER_CONTENT_TYPE = 'Content-Type'
 HTTP_HEADER_CONTENT_LENGTH = 'Content-Length'
 HTTP_HEADER_ALLOW = 'Allow'
+HTTP_HEADER_LOCATION = "Location"
 
 HTTP_HEADER_CONDITIONAL_IF_MATCH = 'If-Match'
 HTTP_HEADER_ETAG = 'Etag'
