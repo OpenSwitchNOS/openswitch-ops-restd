@@ -16,6 +16,7 @@
 import httplib
 import socket
 import rbac
+import yaml
 
 from struct import pack, unpack, calcsize
 from Crypto.PublicKey import RSA
@@ -32,10 +33,11 @@ from opsrest.custom.restobject import RestObject
 from opsrest.custom.accountvalidator import AccountValidator
 from opsrest.constants import (REQUEST_TYPE_UPDATE, USERNAME_KEY,
                                USER_ROLE_KEY, USER_PERMISSIONS_KEY,
-                               OVSDB_SCHEMA_STATUS, PASSWD_SRV_SOCK_FD,
-                               PASSWD_SRV_PUB_KEY_LOC, PASSWD_MSG_CHG_PASSWORD,
+                               OVSDB_SCHEMA_STATUS, PASSWD_MSG_CHG_PASSWORD,
                                PASSWD_USERNAME_SIZE, PASSWD_PASSWORD_SIZE,
-                               PASSWD_SRV_GENERIC_ERR, PASSWD_SRV_SOCK_TIMEOUT)
+                               PASSWD_SRV_GENERIC_ERR, PASSWD_SRV_SOCK_TIMEOUT,
+                               PASSWD_SRV_YAML, PASSWD_SRV_SOCK_TYPE_KEY,
+                               PASSWD_SRV_PUB_TYPE_KEY)
 
 # Password Server Error codes
 from opsrest.constants import (PASSWD_ERR_FATAL,
@@ -76,9 +78,11 @@ class AccountController(BaseController):
 
         # Attempt connection to the password server
         try:
+            passwd_srv_sock_fd = \
+             self.__get_passwd_srv_files_location__(PASSWD_SRV_SOCK_TYPE_KEY)
             app_log.debug("Connecting to Password Server at %s" %
-                          PASSWD_SRV_SOCK_FD)
-            sock.connect(PASSWD_SRV_SOCK_FD)
+                          passwd_srv_sock_fd)
+            sock.connect(passwd_srv_sock_fd)
         except socket.error, msg:
             app_log.debug("Error connecting to Password Server: %s" % msg)
             raise PasswordChangeError(PASSWD_SRV_GENERIC_ERR)
@@ -109,8 +113,10 @@ class AccountController(BaseController):
 
     def __encrypt_password_server_message__(self, username, current_password,
                                             new_password):
+        passwd_srv_pub_key_loc = \
+         self.__get_passwd_srv_files_location__(PASSWD_SRV_PUB_TYPE_KEY)
         app_log.info("Encrypting Password Server message using pubkey at %s" %
-                     PASSWD_SRV_PUB_KEY_LOC)
+                     passwd_srv_pub_key_loc)
 
         # Pack and format the message as expected by the Password Server
         message = self.__format_password_server_message__(username,
@@ -118,7 +124,7 @@ class AccountController(BaseController):
                                                           new_password)
         try:
             # Read and import the Password Server's public key
-            with open(PASSWD_SRV_PUB_KEY_LOC, 'r') as pub_key_file:
+            with open(passwd_srv_pub_key_loc, 'r') as pub_key_file:
                 pub_key_str = pub_key_file.read()
             pub_key = RSA.importKey(pub_key_str)
 
@@ -182,6 +188,18 @@ class AccountController(BaseController):
             return current_user[USERNAME_KEY]
         else:
             raise NotAuthenticated("No user currently logged in")
+
+    @staticmethod
+    def __get_passwd_srv_files_location__(type=None):
+        passwd_srv_yaml = open(PASSWD_SRV_YAML, "r")
+        passwd_srv_files = yaml.load_all(passwd_srv_yaml)
+        for files in passwd_srv_files:
+            for k, v in files.items():
+                passwd_srv_list = v
+        for element in passwd_srv_list:
+            if type == element['type']:
+                return element['path']
+        return passwd_srv_list
 
     @gen.coroutine
     def update(self, item_id, data, current_user, query_args):
