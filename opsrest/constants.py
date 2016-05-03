@@ -113,9 +113,9 @@ PASSWD_USERNAME_SIZE = 50
 PASSWD_PASSWORD_SIZE = 50
 # OP Codes
 PASSWD_MSG_CHG_PASSWORD = 1
-# File locations
-PASSWD_SRV_SOCK_FD = "/var/run/ops-passwd-srv/ops-passwd-srv.sock"
-PASSWD_SRV_PUB_KEY_LOC = "/var/run/ops-passwd-srv/ops-passwd-srv-pub.pem"
+# Types
+PASSWD_SRV_SOCK_TYPE_KEY = "SOCKET"
+PASSWD_SRV_PUB_TYPE_KEY = "PUB_KEY"
 # Error codes
 PASSWD_ERR_FATAL = -1
 PASSWD_ERR_SUCCESS = 0

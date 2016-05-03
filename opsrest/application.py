@@ -13,12 +13,15 @@
 #  under the License.
 
 from tornado.web import Application, StaticFileHandler
+from tornado.log import app_log
 
+from opsrest.exceptions import InternalError
 from opsrest.manager import OvsdbConnectionManager
 from opslib import restparser
 from opsrest import constants
 from opsvalidator import validator
 import cookiesecret
+import yaml
 
 
 class OvsdbApiApplication(Application):
@@ -30,6 +33,9 @@ class OvsdbApiApplication(Application):
         schema = self.settings.get('ext_schema')
         self.restschema = restparser.parseSchema(schema)
         self._url_patterns = self._get_url_patterns()
+        self.passwd_srv_sock_fd = None
+        self.passwd_srv_pub_key_loc = None
+        self.__get_passwd_srv_files_location__()
         Application.__init__(self, self._url_patterns, **self.settings)
 
         # We must block the application start until idl connection
@@ -57,3 +63,20 @@ class OvsdbApiApplication(Application):
         modified_url_patterns.extend(static_url_patterns)
 
         return modified_url_patterns
+
+    def __get_passwd_srv_files_location__(self):
+        try:
+            passwd_srv_yaml = open(self.settings.get('passwd_srv_yaml'), "r")
+            passwd_srv_files = yaml.load_all(passwd_srv_yaml)
+            for files in passwd_srv_files:
+                for k, v in files.items():
+                    passwd_srv_list = v
+            for element in passwd_srv_list:
+                if element['type'] == constants.PASSWD_SRV_SOCK_TYPE_KEY:
+                    self.passwd_srv_sock_fd = element['path']
+                if element['type'] == constants.PASSWD_SRV_PUB_TYPE_KEY:
+                    self.passwd_srv_pub_key_loc = element['path']
+            passwd_srv_yaml.close()
+        except Exception as e:
+            app_log.debug("Failed to open Password Server YAML file: %s" % e)
+            raise InternalError(constants.PASSWD_SRV_GENERIC_ERR)

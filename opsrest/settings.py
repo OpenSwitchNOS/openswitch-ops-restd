@@ -17,7 +17,6 @@ import custom
 
 from tornado.options import define
 
-
 define("HTTPS_port", default=443, help="run on the given port", type=int)
 define("HTTP_port", default=80, help="run on the given port", type=int)
 define("config", default=None, help="tornado config file")
@@ -37,3 +36,4 @@ settings['cfg_db_schema'] = '/usr/share/openvswitch/configdb.ovsschema'
 
 settings["account_schema"] = os.path.join(os.path.dirname(custom.__file__),
                                           'schemas/Account.json')
+settings["passwd_srv_yaml"] = '/etc/ops-passwd-srv/ops-passwd-srv.yaml'

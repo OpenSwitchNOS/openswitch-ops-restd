@@ -22,6 +22,7 @@ from tornado.log import app_log
 
 # Local imports
 from opsrest.handlers.base import BaseHandler
+from opsrest.custom.accountcontroller import AccountController
 from opsrest.exceptions import APIException, MethodNotAllowed, \
     LengthRequired, ParseError
 from opsrest.constants import\
@@ -35,6 +36,11 @@ class CustomRESTHandler(BaseHandler):
     def initialize(self, ref_object, controller_class):
         self.ref_object = ref_object
         self.controller = controller_class(ref_object)
+        if isinstance(self.controller, AccountController):
+            self.controller.passwd_srv_sock_fd = \
+                self.ref_object.passwd_srv_sock_fd
+            self.controller.passwd_srv_pub_key_loc = \
+                self.ref_object.passwd_srv_pub_key_loc
         self.request.path = re.sub("/{2,}", "/", self.request.path).rstrip('/')
         self.error_message = None
 
