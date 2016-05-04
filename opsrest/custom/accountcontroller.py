@@ -30,10 +30,10 @@ from opsrest.custom.schemavalidator import SchemaValidator
 from opsrest.custom.basecontroller import BaseController
 from opsrest.custom.restobject import RestObject
 from opsrest.custom.accountvalidator import AccountValidator
+from opsrest.custom.passwordserverconfig import PasswordServerConfig
 from opsrest.constants import (REQUEST_TYPE_UPDATE, USERNAME_KEY,
                                USER_ROLE_KEY, USER_PERMISSIONS_KEY,
-                               OVSDB_SCHEMA_STATUS, PASSWD_SRV_SOCK_FD,
-                               PASSWD_SRV_PUB_KEY_LOC, PASSWD_MSG_CHG_PASSWORD,
+                               OVSDB_SCHEMA_STATUS, PASSWD_MSG_CHG_PASSWORD,
                                PASSWD_USERNAME_SIZE, PASSWD_PASSWORD_SIZE,
                                PASSWD_SRV_GENERIC_ERR, PASSWD_SRV_SOCK_TIMEOUT)
 
@@ -51,6 +51,7 @@ class AccountController(BaseController):
         self.schemavalidator = SchemaValidator("account_schema")
         self.validator = AccountValidator()
         self.base_uri_path = "account"
+        self.passwd_srv = PasswordServerConfig()
 
     def __pad_nul__(self, data, size):
         """
@@ -77,8 +78,8 @@ class AccountController(BaseController):
         # Attempt connection to the password server
         try:
             app_log.debug("Connecting to Password Server at %s" %
-                          PASSWD_SRV_SOCK_FD)
-            sock.connect(PASSWD_SRV_SOCK_FD)
+                          self.passwd_srv.passwd_srv_sock_fd)
+            sock.connect(self.passwd_srv.passwd_srv_sock_fd)
         except socket.error, msg:
             app_log.debug("Error connecting to Password Server: %s" % msg)
             raise PasswordChangeError(PASSWD_SRV_GENERIC_ERR)
@@ -110,7 +111,7 @@ class AccountController(BaseController):
     def __encrypt_password_server_message__(self, username, current_password,
                                             new_password):
         app_log.info("Encrypting Password Server message using pubkey at %s" %
-                     PASSWD_SRV_PUB_KEY_LOC)
+                     self.passwd_srv.passwd_srv_pub_key_loc)
 
         # Pack and format the message as expected by the Password Server
         message = self.__format_password_server_message__(username,
@@ -118,7 +119,8 @@ class AccountController(BaseController):
                                                           new_password)
         try:
             # Read and import the Password Server's public key
-            with open(PASSWD_SRV_PUB_KEY_LOC, 'r') as pub_key_file:
+            with open(
+             self.passwd_srv.passwd_srv_pub_key_loc, 'r') as pub_key_file:
                 pub_key_str = pub_key_file.read()
             pub_key = RSA.importKey(pub_key_str)
 
