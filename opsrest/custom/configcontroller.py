@@ -56,7 +56,7 @@ class ConfigController(BaseController):
                 (status, error) = ops.cfgd.write(data)
             if status != SUCCESS:
                 if status == UNCHANGED:
-                    raise NotModified
+                    raise NotModified("Unchanged")
                 else:
                     if request_type == CONFIG_TYPE_RUNNING:
                         error = self.txn.get_error()

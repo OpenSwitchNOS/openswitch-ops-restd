@@ -16,6 +16,8 @@ import _read, _write
 import ops.constants, ops.opsidl
 
 from ovs.db.idl import SchemaHelper, Idl, Transaction
+from validatoradapter import ValidatorAdapter
+
 
 def register(extschema, ovsschema, ovsremote):
     """Register interest in all configuration and index
@@ -41,7 +43,6 @@ def register(extschema, ovsschema, ovsremote):
         config_columns = [str(key) for key in tableschema.config.keys()]
         # reference columns
         reference_columns = [str(key) for key in tableschema.references.keys()]
-
 
         # index columns
         for item in tableschema.index_columns:
@@ -90,6 +91,7 @@ def read(extschema, idl):
     config[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE] = config[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE].values()[0]
     return config
 
+
 def write(data, extschema, idl, txn=None, block=False):
     """Write a new configuration to OpenSwitch OVSDB database
 
@@ -118,8 +120,12 @@ def write(data, extschema, idl, txn=None, block=False):
     # current database's System row UUID so that all
     # tables in 'data' are represented the same way
 
+    # Validator adapter for keeping track of the operations and performing
+    # validations.
+    validator_adapter = ValidatorAdapter(idl, extschema)
+
     system_uuid = idl.tables[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE].rows.keys()[0]
-    data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE] = {system_uuid:data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE]}
+    data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE] = {system_uuid: data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE]}
 
     # iterate over all top-level tables i.e. root
     for table_name, tableschema in extschema.ovs_tables.iteritems():
@@ -129,7 +135,7 @@ def write(data, extschema, idl, txn=None, block=False):
             continue
 
         # set up the non-child table
-        _write.setup_table(table_name, data, extschema, idl, txn)
+        _write.setup_table(table_name, data, extschema, idl, txn, validator_adapter)
 
     # iterate over all tables to fill in references
     for table_name, tableschema in extschema.ovs_tables.iteritems():
@@ -139,7 +145,13 @@ def write(data, extschema, idl, txn=None, block=False):
 
         _write.setup_references(table_name, data, extschema, idl)
 
-    if not block:
+    # Execute custom validations, which also performs deletions from the IDL.
+    validator_adapter.exec_validators_with_ops()
+
+    if validator_adapter.has_errors():
+        txn.abort()
+        return txn.UNCHANGED
+    elif not block:
         # txn maybe be incomplete
         return txn.commit()
     else:
