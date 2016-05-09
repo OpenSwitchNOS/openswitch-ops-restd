@@ -17,14 +17,15 @@ import types
 import ops.utils
 import ops.constants
 import urllib
-
+from validatoradapter import ValidatorAdapter
+from opsrest.constants import *
 
 global_ref_list = {}
 
 
 # FIXME: ideally this info should come from extschema
 def is_immutable_table(table, extschema):
-    default_tables = ['Bridge', 'VRF']
+    default_tables = ['Bridge', 'VRF', 'Q_Profile_Entry', 'Queue', 'QoS', 'Q_Profile', 'QoS_DSCP_Map_Entry', 'QoS_COS_Map_Entry']
     if extschema.ovs_tables[table].mutable and table not in default_tables:
         return False
     return True
@@ -39,7 +40,7 @@ def _index_to_row(index, table, extschema, idl):
     return row
 
 
-def _delete(row, table, extschema, idl, txn):
+def _delete(row, table, extschema, idl, txn, validator_adapter, parent_row = None, parent_table = None):
     for key in extschema.ovs_tables[table].children:
         if key in extschema.ovs_tables[table].references:
             child_table_name = extschema.ovs_tables[table].references[key].ref_table
@@ -52,12 +53,14 @@ def _delete(row, table, extschema, idl, txn):
                     child_uuid_list.append(item.uuid)
                 while child_uuid_list:
                     child = idl.tables[child_table_name].rows[child_uuid_list[0]]
-                    _delete(child, child_table_name, extschema, idl, txn)
+                    _delete(child, child_table_name, extschema, idl, txn, validator_adapter, row, table)
                     child_uuid_list.pop(0)
-    row.delete()
+    # Add to validator adapter for validation and deletion
+    validator_adapter.add_resource_op(REQUEST_TYPE_DELETE, row, table,
+                                      parent_row, parent_table)
 
 
-def setup_table(table_name, data, extschema, idl, txn):
+def setup_table(table_name, data, extschema, idl, txn, validator_adapter):
 
     # table is missing from config json
     if table_name not in data:
@@ -65,14 +68,18 @@ def setup_table(table_name, data, extschema, idl, txn):
             # if mutable, empty table
             table_rows = idl.tables[table_name].rows.values()
             while table_rows:
-                _delete(table_rows[0], table_name, extschema, idl, txn)
+                _delete(table_rows[0], table_name, extschema, idl, txn, validator_adapter)
                 table_rows = idl.tables[table_name].rows.values()
         return
     else:
         # update table
         tabledata = data[table_name]
         for rowindex, rowdata in tabledata.iteritems():
-            setup_row({rowindex:rowdata}, table_name, extschema, idl, txn)
+
+            (row_dict, _new) = setup_row({rowindex:rowdata}, table_name, extschema, idl, txn, validator_adapter)
+            if row_dict is not None:
+                op = REQUEST_TYPE_CREATE if _new else REQUEST_TYPE_UPDATE
+                validator_adapter.add_resource_op(op, row_dict.values()[0], table_name)
 
 
 def setup_references(table, data, extschema, idl):
@@ -160,7 +167,7 @@ def setup_row_references(rowdata, table, extschema, idl):
             setup_row_references({index:data}, child_table, extschema, idl)
 
 
-def setup_row(rowdata, table_name, extschema, idl, txn):
+def setup_row(rowdata, table_name, extschema, idl, txn, validator_adapter):
     """
     set up rows recursively
     """
@@ -251,18 +258,23 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
 
                         if not is_immutable_table(child_table_name, extschema):
                             while delete_list:
-                                _delete(delete_list[0], child_table_name, extschema, idl, txn)
+                                _delete(delete_list[0], child_table_name, extschema, idl, txn, validator_adapter, row, table_name)
                                 delete_list.pop(0)
 
                 # setup children
                 children = {}
                 for index, child_data in new_data.iteritems():
-                    (_child, is_new) = setup_row({index:child_data}, child_table_name, extschema, idl, txn)
+                    (_child, is_new) = setup_row({index:child_data}, child_table_name, extschema, idl, txn, validator_adapter)
                     # NOTE: None is returned when attempting to add a new row in an immutable table
                     if _child is None:
                         continue
 
                     children.update(_child)
+
+                    op = REQUEST_TYPE_CREATE if is_new else \
+                         REQUEST_TYPE_UPDATE
+                    validator_adapter.add_resource_op(op, _child.values()[0],
+                                                      child_table_name, row, table_name)
 
                 # NOTE: If the child table doesn't have indexes, replace json index
                 # with row.uuid
@@ -319,7 +331,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
                     # NOTE: delete only from immutable table
                     if not is_immutable_table(key, extschema):
                         while delete_list:
-                            _delete(delete_list[0], key, extschema, idl, txn)
+                            _delete(delete_list[0], key, extschema, idl, txn, validator_adapter, row, table_name)
                             delete_list.pop(0)
 
                 # set up children rows
@@ -332,7 +344,12 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
                         for _x in split_x:
                             tmp.append(urllib.quote(str(_x), safe=''))
                         x = '/'.join(tmp)
-                        (child, is_new) = setup_row({x:y}, key, extschema, idl, txn)
+                        (child, is_new) = setup_row({x:y}, key, extschema, idl, txn, validator_adapter)
+                        if child is not None:
+                            op = REQUEST_TYPE_CREATE if is_new else \
+                            REQUEST_TYPE_UPDATE
+                            validator_adapter.add_resource_op(op, child.values()[0],
+                                      child_table_name, row, table_name)
 
                         # fill the parent reference column
                         if child is not None and is_new:
