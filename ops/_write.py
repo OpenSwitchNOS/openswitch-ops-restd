@@ -33,9 +33,9 @@ def is_immutable_table(table, extschema):
 def _index_to_row(index, table, extschema, idl):
     table_schema = extschema.ovs_tables[table]
     row = ops.utils.index_to_row(index, table_schema, idl)
-    if row is None and table_schema.name in global_ref_list:
-        if index in global_ref_list[table_schema.name]:
-            row = global_ref_list[table_schema.name][index]
+    if row is None and table in global_ref_list:
+        if index in global_ref_list[table]:
+            row = global_ref_list[table][index]
     return row
 
 
@@ -88,6 +88,10 @@ def setup_references(table, data, extschema, idl):
 def setup_row_references(rowdata, table, extschema, idl):
     row_index = rowdata.keys()[0]
     row_data = rowdata.values()[0]
+
+    # we skipped immutable tables in setup_row
+    if is_immutable_table(table, extschema):
+        return
 
     row = _index_to_row(row_index, table, extschema, idl)
     if row is None:
