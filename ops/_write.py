@@ -33,9 +33,9 @@ def is_immutable_table(table, extschema):
 def _index_to_row(index, table, extschema, idl):
     table_schema = extschema.ovs_tables[table]
     row = ops.utils.index_to_row(index, table_schema, idl)
-    if row is None and table_schema.name in global_ref_list:
-        if index in global_ref_list[table_schema.name]:
-            row = global_ref_list[table_schema.name][index]
+    if row is None and table in global_ref_list:
+        if index in global_ref_list[table]:
+            row = global_ref_list[table][index]
     return row
 
 
@@ -76,6 +76,7 @@ def setup_table(table_name, data, extschema, idl, txn):
 
 
 def setup_references(table, data, extschema, idl):
+
     if table not in data:
         return
 
@@ -86,12 +87,15 @@ def setup_references(table, data, extschema, idl):
 
 
 def setup_row_references(rowdata, table, extschema, idl):
+
     row_index = rowdata.keys()[0]
     row_data = rowdata.values()[0]
 
     row = _index_to_row(row_index, table, extschema, idl)
     if row is None:
-        raise Exception('Row with index %s not found' % row_index)
+        if not is_immutable_table(table, extschema):
+            raise Exception('Row with index %s not found' % row_index)
+        return
 
     # set references for this row
     table_schema = extschema.ovs_tables[table]
@@ -160,17 +164,20 @@ def setup_row_references(rowdata, table, extschema, idl):
             setup_row_references({index:data}, child_table, extschema, idl)
 
 
-def setup_row(rowdata, table_name, extschema, idl, txn):
+def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
     """
     set up rows recursively
     """
+
     row_index = rowdata.keys()[0]
     row_data = rowdata.values()[0]
     table_schema = extschema.ovs_tables[table_name]
 
     # get row reference from table
     _new = False
-    row = ops.utils.index_to_row(row_index, table_schema, idl)
+    if row is None:
+        row = ops.utils.index_to_row(row_index, table_schema, idl)
+
     if row is None:
         # do not add row to an immutable table
         if is_immutable_table(table_name, extschema):
@@ -182,7 +189,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
         if table_name not in global_ref_list:
             global_ref_list[table_name] = {}
         global_ref_list[table_name][row_index] = row
-    # NOTE: populate configuration data
+
     config_keys = table_schema.config.keys()
     for key in config_keys:
 
@@ -198,10 +205,10 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
             else:
                 # set the right empty value
                 value =  ops.utils.get_empty_by_basic_type(row.__getattr__(key))
+                row.__setattr__(key, value)
         else:
             value = row_data[key]
-
-        row.__setattr__(key, value)
+            row.__setattr__(key, value)
 
     # NOTE: populate non-config index columns
     if _new:
@@ -219,32 +226,107 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
         if key in table_schema.references:
 
             child_table_name = table_schema.references[key].ref_table
+            _min = table_schema.references[key].n_min
+            _max = table_schema.references[key].n_max
+            kv_type = table_schema.references[key].kv_type
 
-            # set up empty reference list if table entry is missing
-            # Do this only for mutable tables
+            # no children case
             if key not in row_data or not row_data[key]:
-                if is_immutable_table(child_table_name, extschema):
+                if not is_immutable_table(child_table_name, extschema):
                     if _new or row.__getattr__(key) is None:
                         continue
                     else:
-                       value = ops.utils.get_empty_by_basic_type(row.__getattr__(key))
-                    # set only if its immutable child table
-                    if not is_immutable_table(table_name, extschema):
+                        value = None
+                        if _min == 1 and _max == 1:
+                            if kv_type:
+                                value = {}
+                        elif kv_type:
+                            value = {}
+                        else:
+                            value = []
                         row.__setattr__(key, value)
+
             else:
                 new_data = row_data[key]
 
-                # {key:UUID} type of reference check
-                kv_type = table_schema.references[key].kv_type
+                # single child
+                if _min == 1 and _max == 1 and not kv_type:
+                    if len(new_data) > 1:
+                        raise Exception('only one reference allowed in column %s of table %s' % (key, table_name))
+                    if not kv_type:
+                        (_child, is_new) = setup_row(new_data, child_table_name, extschema, idl, txn)
+                        row.__setattr__(key, _child.values()[0])
 
-                # if not a new row, delete non-existent child references
-                if not _new:
-                    current_list = row.__getattr__(key)
-                    if current_list:
-                        if kv_type:
-                            current_list = current_list.values()
+                # kv type children references
+                elif kv_type:
+
+                    key_type = table_schema.references[key].kv_key_type.name
+                    column_data = {}
+                    if not _new:
+                        column_data = row.__getattr__(key)
+
+                    if _min == 1 and _max == 1:
+                        if len(new_data) > 1:
+                            raise Exception('only one reference allowed in column %s of table %s' % (key, table_name))
+
+                    # delete non-existent children
+                    if not _new:
                         delete_list = []
-                        for item in current_list:
+                        for index, item in column_data.iteritems():
+
+                            # TODO: Support other types
+                            if key_type == 'integer':
+                                index = str(index)
+
+                            if index not in new_data:
+                                delete_list.append(item)
+
+                        if not is_immutable_table(child_table_name, extschema):
+                            while delete_list:
+                                _delete(delete_list[0], child_table_name, extschema, idl, txn)
+                                delete_list.pop(0)
+
+                    children = {}
+                    for index, child_data in new_data.iteritems():
+                        child = {index:child_data}
+
+                        # TODO: Support other types
+                        if key_type == 'integer':
+                            index = int(index)
+
+                        if index in column_data:
+                            (_child, is_new) = setup_row(child, child_table_name, extschema, idl, txn, column_data[index])
+                        else:
+                            (_child, is_new) = setup_row(child, child_table_name, extschema, idl, txn)
+
+                        if _child is not None:
+
+                            # TODO: Support other types
+                            if key_type == 'integer':
+                                children.update({int(_child.keys()[0]):_child.values()[0]})
+                            else:
+                                children.update(_child)
+
+                    if not extschema.ovs_tables[child_table_name].index_columns:
+                        for k,v in children.iteritems():
+
+                            # TODO: Support other types
+                            if key_type == 'integer':
+                                k = str(k)
+
+                            new_data[v.uuid] = new_data[k]
+                            del new_data[k]
+
+                    row.__setattr__(key, children)
+
+                # list type children references
+                else:
+                    column_data = []
+                    if not _new:
+                        column_data = row.__getattr__(key)
+                    if not _new:
+                        delete_list = []
+                        for item in column_data:
                             index = ops.utils.row_to_index(item, child_table_name, extschema, idl)
                             if index not in new_data:
                                 delete_list.append(item)
@@ -254,32 +336,17 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
                                 _delete(delete_list[0], child_table_name, extschema, idl, txn)
                                 delete_list.pop(0)
 
-                # setup children
-                children = {}
-                for index, child_data in new_data.iteritems():
-                    (_child, is_new) = setup_row({index:child_data}, child_table_name, extschema, idl, txn)
-                    # NOTE: None is returned when attempting to add a new row in an immutable table
-                    if _child is None:
-                        continue
+                    children = {}
+                    for index, child_data in new_data.iteritems():
+                        (_child, is_new) = setup_row({index:child_data}, child_table_name, extschema, idl, txn)
+                        if _child is not None:
+                            children.update(_child)
 
-                    children.update(_child)
-
-                # NOTE: If the child table doesn't have indexes, replace json index
-                # with row.uuid
-                if not extschema.ovs_tables[child_table_name].index_columns:
-                    for k,v in children.iteritems():
-                        new_data[v.uuid] = new_data[k]
-                        del new_data[k]
-
-                if kv_type:
-                    # TODO: Add support for other key types
-                    if table_schema.references[key].kv_key_type.name == 'integer':
-                        tmp = {}
+                    if not extschema.ovs_tables[child_table_name].index_columns:
                         for k,v in children.iteritems():
-                            tmp[int(k)] = v
-                        children = tmp
-                    row.__setattr__(key, children)
-                else:
+                            new_data[v.uuid] = new_data[k]
+                            del new_data[k]
+
                     row.__setattr__(key, children.values())
 
         # Backward reference
