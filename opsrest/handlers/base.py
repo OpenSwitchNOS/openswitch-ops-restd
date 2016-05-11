@@ -28,7 +28,8 @@ from opsrest.exceptions import (
     AuthenticationFailed,
     NotAuthenticated,
     ParameterNotAllowed,
-    TransactionFailed
+    TransactionFailed,
+    DataValidationFailed
 )
 from opsrest.utils.auditlogutils import audit_log_user_msg, audit
 from opsrest.utils.getutils import get_query_arg
@@ -84,6 +85,11 @@ class BaseHandler(web.RequestHandler):
                                            REST_QUERY_PARAM_DEPTH,
                                            REST_QUERY_PARAM_KEYS,
                                            REQUEST_TYPE_READ))
+
+            # Validate selector
+            selector = get_query_arg(REST_QUERY_PARAM_SELECTOR,
+                                     self.request.query_arguments)
+            self.validate_selector(selector)
 
         except Exception as e:
             self.on_exception(e)
@@ -223,3 +229,27 @@ class BaseHandler(web.RequestHandler):
             result = int(200 <= self.get_status() < 300)
             audit_log_user_msg(op, auditlog_type, uri, cfgdata, user,
                                hostname, addr, result, self.error_message)
+
+    def validate_selector(self, selector):
+        if selector:
+            # Check if is a valid selector
+            if selector not in VALID_CATEGORIES:
+                raise DataValidationFailed("Invalid selector '%s'" %
+                                           selector)
+
+            # PUT, POST, DELETE, PATCH can only use selector param in
+            # combination with If-Match header
+            if HTTP_HEADER_CONDITIONAL_IF_MATCH not in self.request.headers\
+                    and self.request.method in [REQUEST_TYPE_CREATE,
+                                                REQUEST_TYPE_UPDATE,
+                                                REQUEST_TYPE_PATCH,
+                                                REQUEST_TYPE_DELETE]:
+                raise ParameterNotAllowed("Argument '%s' is only allowed "
+                                          "in combination with If-Match "
+                                          "header for the following methods: "
+                                          "'%s', '%s', '%s', '%s'" %
+                                          (REST_QUERY_PARAM_SELECTOR,
+                                           REQUEST_TYPE_CREATE,
+                                           REQUEST_TYPE_UPDATE,
+                                           REQUEST_TYPE_PATCH,
+                                           REQUEST_TYPE_DELETE))
