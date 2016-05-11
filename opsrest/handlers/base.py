@@ -25,7 +25,8 @@ from tornado import gen
 from opsrest.constants import *
 from opsrest.exceptions import APIException, TransactionFailed, \
     ParameterNotAllowed, NotAuthenticated, \
-    AuthenticationFailed, ForbiddenMethod
+    AuthenticationFailed, ForbiddenMethod, \
+    DataValidationFailed
 from opsrest.settings import settings
 from opsrest.utils.auditlogutils import audit_log_user_msg, audit
 from opsrest.utils.getutils import get_query_arg
@@ -84,6 +85,11 @@ class BaseHandler(web.RequestHandler):
                                            REST_QUERY_PARAM_DEPTH,
                                            REST_QUERY_PARAM_KEYS,
                                            REQUEST_TYPE_READ))
+
+            # Validate selector
+            selector = get_query_arg(REST_QUERY_PARAM_SELECTOR,
+                                     self.request.query_arguments)
+            self.validate_selector(selector)
 
         except APIException as e:
             self.on_exception(e)
@@ -155,12 +161,15 @@ class BaseHandler(web.RequestHandler):
 
                 app_log.debug("Using resource_id=%s" % item_id)
                 if item_id:
-                    result = yield self.controller.get(item_id,
-                                                       self.get_current_user(),
-                                                       selector, query_arguments)
+                    result = \
+                        yield self.controller.get(item_id,
+                                                  self.get_current_user(),
+                                                  selector, query_arguments)
                 else:
-                    result = yield self.controller.get_all(self.get_current_user(),
-                                                           selector, query_arguments)
+                    result = \
+                        yield self.controller.get_all(self.get_current_user(),
+                                                      selector,
+                                                      query_arguments)
 
             else:
                 raise TransactionFailed("Resource cannot handle If-Match")
@@ -238,3 +247,27 @@ class BaseHandler(web.RequestHandler):
                 permissions = rbac.get_user_permissions(username)
                 if METHOD_PERMISSION_MAP[method] not in permissions:
                     raise ForbiddenMethod
+
+    def validate_selector(self, selector):
+        if selector:
+            # Check if is a valid selector
+            if selector not in VALID_CATEGORIES:
+                raise DataValidationFailed("Invalid selector '%s'" %
+                                           selector)
+
+            # PUT, POST, DELETE, PATCH can only use selector param in
+            # combination with If-Match header
+            if HTTP_HEADER_CONDITIONAL_IF_MATCH not in self.request.headers\
+                    and self.request.method in [REQUEST_TYPE_CREATE,
+                                                REQUEST_TYPE_UPDATE,
+                                                REQUEST_TYPE_PATCH,
+                                                REQUEST_TYPE_DELETE]:
+                raise ParameterNotAllowed("Argument '%s' is only allowed "
+                                          "in combination with If-Match "
+                                          "header for the following methods: "
+                                          "'%s', '%s', '%s', '%s'" %
+                                          (REST_QUERY_PARAM_SELECTOR,
+                                           REQUEST_TYPE_CREATE,
+                                           REQUEST_TYPE_UPDATE,
+                                           REQUEST_TYPE_PATCH,
+                                           REQUEST_TYPE_DELETE))
