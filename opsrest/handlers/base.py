@@ -89,9 +89,29 @@ class BaseHandler(web.RequestHandler):
             if self.request.method == REQUEST_TYPE_CREATE \
                or self.request.method == REQUEST_TYPE_UPDATE \
                or self.request.method == REQUEST_TYPE_PATCH:
-                if int(self.request.headers['Content-Length']) \
-                 > MAX_BODY_SIZE:
+                if int(self.request.headers['Content-Length']) > MAX_BODY_SIZE:
                     raise DataValidationFailed("Content-Length too long")
+
+            # Validate selector
+            selector = get_query_arg(REST_QUERY_PARAM_SELECTOR,
+                                     self.request.query_arguments)
+            if selector:
+                # Check if is a valid selector
+                if selector not in VALID_CATEGORIES:
+                    raise DataValidationFailed("Invalid selector '%s'" %
+                                               selector)
+
+                # The selector can be used on PUT, PATCH, GET, DELETE because
+                # the client can use If-Match.
+                if self.request.method == REQUEST_TYPE_CREATE:
+                    raise ParameterNotAllowed("Argument '%s' is "
+                                              "only allowed in "
+                                              "'%s', '%s', '%s', '%s'" %
+                                              (REST_QUERY_PARAM_SELECTOR,
+                                               REQUEST_TYPE_READ,
+                                               REQUEST_TYPE_UPDATE,
+                                               REQUEST_TYPE_PATCH,
+                                               REQUEST_TYPE_DELETE))
 
         except APIException as e:
             self.on_exception(e)
@@ -163,12 +183,15 @@ class BaseHandler(web.RequestHandler):
 
                 app_log.debug("Using resource_id=%s" % item_id)
                 if item_id:
-                    result = yield self.controller.get(item_id,
-                                                       self.get_current_user(),
-                                                       selector, query_arguments)
+                    result = \
+                        yield self.controller.get(item_id,
+                                                  self.get_current_user(),
+                                                  selector, query_arguments)
                 else:
-                    result = yield self.controller.get_all(self.get_current_user(),
-                                                           selector, query_arguments)
+                    result = \
+                        yield self.controller.get_all(self.get_current_user(),
+                                                      selector,
+                                                      query_arguments)
 
             else:
                 raise TransactionFailed("Resource cannot handle If-Match")
