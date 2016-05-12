@@ -23,7 +23,7 @@ from opsrest.parse import parse_url_path
 from opsrest.utils import utils
 from opsrest.constants import *
 from opsrest.exceptions import APIException, LengthRequired, \
-    ParameterNotAllowed
+    ParameterNotAllowed, DataValidationFailed
 from opsrest.utils.getutils import get_filters_args
 
 
@@ -65,6 +65,13 @@ class OVSDBAPIHandler(base.BaseHandler):
                 app_log.debug("If-Match result: %s" % match)
                 if not match:
                     self.finish()
+
+            if self.request.method == REQUEST_TYPE_CREATE \
+                    or self.request.method == REQUEST_TYPE_UPDATE \
+                    or self.request.method == REQUEST_TYPE_PATCH:
+                if int(self.request.headers['Content-Length']) \
+                        > MAX_BODY_SIZE:
+                    raise DataValidationFailed("Content-Length too long")
 
         except APIException as e:
             self.on_exception(e)
