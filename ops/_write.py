@@ -21,12 +21,22 @@ import urllib
 
 global_ref_list = {}
 
+
 # FIXME: ideally this info should come from extschema
 def is_immutable_table(table, extschema):
     default_tables = ['Bridge', 'VRF']
     if extschema.ovs_tables[table].mutable and table not in default_tables:
         return False
     return True
+
+
+def _index_to_row(index, table, extschema, idl):
+    table_schema = extschema.ovs_tables[table]
+    row = ops.utils.index_to_row(index, table_schema, idl)
+    if row is None and table_schema.name in global_ref_list:
+        if index in global_ref_list[table_schema.name]:
+            row = global_ref_list[table_schema.name][index]
+    return row
 
 
 def _delete(row, table, extschema, idl, txn):
@@ -78,40 +88,63 @@ def setup_references(table, data, extschema, idl):
 def setup_row_references(rowdata, table, extschema, idl):
     row_index = rowdata.keys()[0]
     row_data = rowdata.values()[0]
-    table_schema = extschema.ovs_tables[table]
 
-    row = ops.utils.index_to_row(row_index, table_schema, idl)
-    if row is None and table in global_ref_list:
-        if row_index in global_ref_list[table]:
-            row = global_ref_list[table][row_index]
-        else:
-            raise Exception('reference not found')
+    row = _index_to_row(row_index, table, extschema, idl)
+    if row is None:
+        raise Exception('Row with index %s not found' % row_index)
 
     # set references for this row
+    table_schema = extschema.ovs_tables[table]
     for name, column in table_schema.references.iteritems():
+
+        if column.category != ops.constants.OVSDB_SCHEMA_CONFIG:
+            continue
 
         if name in table_schema.children or column.relation == ops.constants.OVSDB_SCHEMA_PARENT:
             continue
 
-        if name not in row_data:
-            row.__setattr__(name, [])
+        _min = column.n_min
+        _max = column.n_max
+        reftable = column.ref_table
+
+        references = None
+        if (_min==1 and _max==1) and name in row_data:
+            references = _index_to_row(row_data[name], reftable,
+                                       extschema, idl)
+            if references is None:
+                raise Exception('Row with index %s not found' % row_data[name])
+
+        elif column.kv_type:
+            references = {}
+            if name in row_data:
+                key_type = column.kv_key_type.name
+                for key,refindex in row_data[name].iteritems():
+                    refrow = _index_to_row(refindex, reftable,
+                                           extschema, idl)
+                    if refrow is None:
+                        raise Exception('Row with index %s not found' % refindex)
+
+                    # TODO: Add support for other key types
+                    if key_type == 'integer':
+                        key = int(key)
+                    references.update({key:refrow})
         else:
-            reflist = []
-            reftable = column.ref_table
-            refidl = idl.tables[reftable]
-            refschema = extschema.ovs_tables[reftable]
+            references = []
+            if name in row_data:
+                for refindex in row_data[name]:
+                    refrow = _index_to_row(refindex, reftable,
+                                           extschema, idl)
+                    if refrow is None:
+                        raise Exception('Row with index %s not found' % refindex)
+                    references.append(refrow)
 
-            for refindex in row_data[name]:
-                refrow = ops.utils.index_to_row(refindex, refschema, idl)
-                reflist.append(refrow)
-            row.__setattr__(name, reflist)
-
+        row.__setattr__(name, references)
 
     for child in table_schema.children:
+
         # check if child data exists
         if child not in row_data:
             continue
-
         # get the child table name
         child_data = row_data[child]
         child_table = None
@@ -119,11 +152,11 @@ def setup_row_references(rowdata, table, extschema, idl):
             child_table = table_schema.references[child].ref_table
         else:
             child_table = child
+
         for index, data in child_data.iteritems():
             if child_table in extschema.ovs_tables[table].children and\
                     child_table not in extschema.ovs_tables[table].references:
                         index = str(row.uuid) + '/' + index
-
             setup_row_references({index:data}, child_table, extschema, idl)
 
 
@@ -139,7 +172,6 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
     _new = False
     row = ops.utils.index_to_row(row_index, table_schema, idl)
     if row is None:
-
         # do not add row to an immutable table
         if is_immutable_table(table_name, extschema):
             return (None, None)
@@ -150,7 +182,6 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
         if table_name not in global_ref_list:
             global_ref_list[table_name] = {}
         global_ref_list[table_name][row_index] = row
-
     # NOTE: populate configuration data
     config_keys = table_schema.config.keys()
     for key in config_keys:
@@ -241,6 +272,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn):
                         del new_data[k]
 
                 if kv_type:
+                    # TODO: Add support for other key types
                     if table_schema.references[key].kv_key_type.name == 'integer':
                         tmp = {}
                         for k,v in children.iteritems():

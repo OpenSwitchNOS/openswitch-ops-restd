@@ -14,6 +14,7 @@
 
 import ops.constants
 import ops.utils
+import ovs.db.idl
 
 
 def get_row_data(row, table_name, schema, idl, index=None):
@@ -79,7 +80,7 @@ def get_row_data(row, table_name, schema, idl, index=None):
                     if data is None:
                         continue
 
-                    children_data.update({keys[count]: data.values()[0]})
+                    children_data.update({str(keys[count]): data.values()[0]})
                     count = count + 1
                 else:
                     data = get_row_data(item, child_table_name, schema, idl)
@@ -99,7 +100,7 @@ def get_row_data(row, table_name, schema, idl, index=None):
             # Find the 'parent' name from child table (back referenced child)
             # e.g. in Route table 'vrf' column is the 'parent' column
             for name, column in (schema.ovs_tables[child_name].
-                                references.iteritems()):
+                                 references.iteritems()):
                 if column.relation == ops.constants.OVSDB_SCHEMA_PARENT:
                     # Found the parent column
                     column_name = name
@@ -122,22 +123,41 @@ def get_row_data(row, table_name, schema, idl, index=None):
 
     # Iterate through 'references' from table
     for refname, refobj in table_schema.references.iteritems():
+        _min = refobj.n_min
+        _max = refobj.n_max
+        ref_table_name = table_schema.references[refname].ref_table
 
-        refdata = []
-        if (
-            refobj.relation == ops.constants.OVSDB_SCHEMA_REFERENCE
-            and refobj.category == ops.constants.OVSDB_SCHEMA_CONFIG
-        ):
-            reflist = row.__getattr__(refname)
-
-            if len(reflist) == 0:
+        if refobj.relation == ops.constants.OVSDB_SCHEMA_REFERENCE\
+                and refobj.category == ops.constants.OVSDB_SCHEMA_CONFIG:
+            references = row.__getattr__(refname)
+            if not references:
                 continue
 
-            ref_table_name = table_schema.references[refname].ref_table
-            for item in reflist:
-                key_index = ops.utils.row_to_index(
-                    item, ref_table_name, schema, idl)
-                refdata.append(key_index)
+            refdata = None
+            if isinstance(references, ovs.db.idl.Row):
+                if not (_min == 1 and _max == 1):
+                    raise Exception("datatype for column %s in " % refname +
+                                    "table %s must be a UUID" % table_name)
+                else:
+                    refdata = ops.utils.row_to_index(references,
+                                                     ref_table_name,
+                                                     schema, idl)
+            elif isinstance(references, dict):
+                refdata = {}
+                for key, ref in references.iteritems():
+                    ref_index = ops.utils.row_to_index(ref_table_name,
+                                                       schema, idl)
+                    refdata.update({str(key): str(ref_index)})
+            elif isinstance(references, list):
+                refdata = []
+                for ref in references:
+                    ref_index = ops.utils.row_to_index(ref,
+                                                       ref_table_name,
+                                                       schema, idl)
+                    refdata.append(ref_index)
+            else:
+                raise Exception("datatype for column %s in " % refname +
+                                "table %s is not supported" % table_name)
 
             row_data[refname] = refdata
 

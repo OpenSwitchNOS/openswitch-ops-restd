@@ -1,4 +1,4 @@
-# Copyright (C) 2015 Hewlett Packard Enterprise Development LP
+# Copyright (C) 2015-2016 Hewlett Packard Enterprise Development LP
 #
 #  Licensed under the Apache License, Version 2.0 (the "License"); you may
 #  not use this file except in compliance with the License. You may obtain
@@ -17,7 +17,6 @@ import custom
 
 from tornado.options import define
 
-
 define("HTTPS_port", default=443, help="run on the given port", type=int)
 define("HTTP_port", default=80, help="run on the given port", type=int)
 define("config", default=None, help="tornado config file")
@@ -31,9 +30,10 @@ settings["template_path"] = os.path.join(os.path.dirname(__file__),
 settings['ovs_remote'] = 'unix:/var/run/openvswitch/db.sock'
 settings['ovs_schema'] = '/usr/share/openvswitch/vswitch.ovsschema'
 settings['ext_schema'] = '/usr/share/openvswitch/vswitch.extschema'
-settings['auth_enabled'] = False
+settings['auth_enabled'] = True
 settings['cookie_secret'] = '61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo='
 settings['cfg_db_schema'] = '/usr/share/openvswitch/configdb.ovsschema'
 
 settings["account_schema"] = os.path.join(os.path.dirname(custom.__file__),
                                           'schemas/Account.json')
+settings["passwd_srv_yaml"] = '/etc/ops-passwd-srv/ops-passwd-srv.yaml'

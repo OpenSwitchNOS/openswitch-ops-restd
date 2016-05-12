@@ -18,11 +18,13 @@ import hashlib
 import json
 
 from tornado import web
+from tornado import gen
 
 from opsrest.constants import *
 from opsrest.exceptions import (
     APIException,
     AuthenticationFailed,
+    DataValidationFailed,
     NotAuthenticated,
     ParameterNotAllowed,
     TransactionFailed
@@ -70,18 +72,25 @@ class BaseHandler(web.RequestHandler):
             depth = get_query_arg(REST_QUERY_PARAM_DEPTH,
                                   self.request.query_arguments)
 
-            columns = get_query_arg(REST_QUERY_PARAM_COLUMNS,
-                                    self.request.query_arguments)
+            keys = get_query_arg(REST_QUERY_PARAM_KEYS,
+                                 self.request.query_arguments)
 
             if self.request.method != REQUEST_TYPE_READ \
-               and (depth is not None or columns is not None or
+               and (depth is not None or keys is not None or
                     sort is not None):
                 raise ParameterNotAllowed("Arguments %s, %s and %s "
                                           "are only allowed in %s" %
                                           (REST_QUERY_PARAM_SORTING,
                                            REST_QUERY_PARAM_DEPTH,
-                                           REST_QUERY_PARAM_COLUMNS,
+                                           REST_QUERY_PARAM_KEYS,
                                            REQUEST_TYPE_READ))
+
+            if self.request.method == REQUEST_TYPE_CREATE \
+               or self.request.method == REQUEST_TYPE_UPDATE \
+               or self.request.method == REQUEST_TYPE_PATCH:
+                if int(self.request.headers['Content-Length']) \
+                 > MAX_BODY_SIZE:
+                    raise DataValidationFailed("Content-Length too long")
 
         except Exception as e:
             self.on_exception(e)
@@ -119,6 +128,7 @@ class BaseHandler(web.RequestHandler):
             hasher.update(element)
         return '"%s"' % hasher.hexdigest()
 
+    @gen.coroutine
     def process_if_match(self):
         if HTTP_HEADER_CONDITIONAL_IF_MATCH in self.request.headers:
 
@@ -145,12 +155,12 @@ class BaseHandler(web.RequestHandler):
 
                 app_log.debug("Using resource_id=%s" % item_id)
                 if item_id:
-                    result = self.controller.get(item_id,
-                                                 get_current_user(self),
-                                                 selector, query_arguments)
+                    result = yield self.controller.get(item_id,
+                                                       get_current_user(self),
+                                                       selector, query_arguments)
                 else:
-                    result = self.controller.get_all(get_current_user(self),
-                                                     selector, query_arguments)
+                    result = yield self.controller.get_all(get_current_user(self),
+                                                           selector, query_arguments)
 
             else:
                 raise TransactionFailed("Resource cannot handle If-Match")
@@ -158,12 +168,14 @@ class BaseHandler(web.RequestHandler):
             if result is None:
                 app_log.debug("If-Match's result is empty")
                 self.set_status(httplib.PRECONDITION_FAILED)
-                return False
+                raise gen.Return(False)
 
             match = False
             etags = self.request.headers.get(HTTP_HEADER_CONDITIONAL_IF_MATCH,
                                              "").split(',')
+            app_log.debug("Header Etag: %s" % etags)
             current_etag = self.compute_etag(json.dumps(result))
+            app_log.debug("Current etag: %s" % current_etag)
             for e in etags:
                 if e == current_etag or e == '"*"':
                     match = True
@@ -181,12 +193,12 @@ class BaseHandler(web.RequestHandler):
                             result[OVSDB_SCHEMA_CONFIG]:
                             # Set PUT Successful code and finish
                             self.set_status(httplib.OK)
-                            return False
+                            raise gen.Return(False)
                 # For POST, GET, DELETE, PATCH return precondition failed
                 self.set_status(httplib.PRECONDITION_FAILED)
-                return False
+                raise gen.Return(False)
         # Etag matches
-        return True
+        raise gen.Return(True)
 
     def on_finish(self):
         app_log.debug("Finished handling of request from %s",

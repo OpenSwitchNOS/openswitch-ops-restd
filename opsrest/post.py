@@ -20,7 +20,6 @@ from opsrest.exceptions import MethodNotAllowed, DataValidationFailed
 from opsvalidator.error import ValidationError
 
 import httplib
-
 from tornado.log import app_log
 
 
@@ -97,5 +96,7 @@ def post_resource(data, resource, schema, txn, idl):
         app_log.debug(e.error)
         raise DataValidationFailed(e.error)
 
+    index = utils.create_index(schema, verified_data, resource, new_row)
     result = txn.commit()
-    return OvsdbTransactionResult(result)
+
+    return OvsdbTransactionResult(result, index)

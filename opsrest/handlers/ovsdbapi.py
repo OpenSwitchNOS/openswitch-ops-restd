@@ -33,6 +33,7 @@ from opsrest import get, post, delete, put, patch
 class OVSDBAPIHandler(base.BaseHandler):
 
     # parse the url and http params.
+    @gen.coroutine
     def prepare(self):
         try:
             # Call parent's prepare to check authentication
@@ -60,7 +61,8 @@ class OVSDBAPIHandler(base.BaseHandler):
                                               "allowed in %s"
                                               % REQUEST_TYPE_READ)
                 # If Match support
-                match = self.process_if_match()
+                match = yield self.process_if_match()
+                app_log.debug("If-Match result: %s" % match)
                 if not match:
                     self.finish()
 
@@ -133,6 +135,8 @@ class OVSDBAPIHandler(base.BaseHandler):
                                         self.idl)
 
             status = result.status
+            resource_uri = self.request.path + "/" + result.index
+
             if status == INCOMPLETE:
                 self.ref_object.manager.monitor_transaction(self.txn)
                 # on 'incomplete' state we wait until the transaction
@@ -142,6 +146,9 @@ class OVSDBAPIHandler(base.BaseHandler):
 
             # complete transaction
             self.transaction_complete(status)
+
+            # set the http header to include URI
+            self.set_header(HTTP_HEADER_LOCATION, resource_uri)
 
         except APIException as e:
             self.on_exception(e)
