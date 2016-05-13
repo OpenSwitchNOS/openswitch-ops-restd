@@ -367,6 +367,10 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
                 for item in idl.tables[key].rows.itervalues():
                     parent = item.__getattr__(column_name)
                     if parent.uuid == row.uuid:
+                        # NOTE: Route hack until dynamic category is implemented
+                        if table_name == 'VRF' and key == 'Route':
+                            if str(item.__getattr__('from')) != 'static':
+                                continue
                         current_list.append(item)
 
                 new_data = None
