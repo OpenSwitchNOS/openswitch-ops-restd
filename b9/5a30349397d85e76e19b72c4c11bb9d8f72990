@@ -1,0 +1,9 @@
+Verified+1: Zuul <zuul@lists.openswitch.net>
+Code-Review+2: Daniela Ramirez <daniela.rch@hpe.com>
+Verified+2: Chinh Le <chinh.le@hpe.com>
+Workflow+1: Chinh Le <chinh.le@hpe.com>
+Submitted-by: Chinh Le <chinh.le@hpe.com>
+Submitted-at: Fri, 13 May 2016 22:05:29 +0000
+Reviewed-on: https://review.openswitch.net/8959
+Project: openswitch/ops-restd
+Branch: refs/heads/feature/notifications
