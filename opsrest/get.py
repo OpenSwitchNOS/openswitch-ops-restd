@@ -74,7 +74,7 @@ def get_resource_from_db(resource, schema, idl, uri=None,
 
     # Determine if result will be a collection or a single
     # resource, plus the table to use in post processing
-    is_collection = _is_result_a_collection(resource)
+    is_collection = is_resource_type_collection(resource)
     table = resource.next.table
 
     sorting_args = []
@@ -387,7 +387,7 @@ def _create_uri(uri, paths):
     return uri
 
 
-def _is_result_a_collection(resource):
+def is_resource_type_collection(resource):
 
     is_collection = False
 

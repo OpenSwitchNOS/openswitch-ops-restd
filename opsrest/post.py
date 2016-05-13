@@ -62,8 +62,8 @@ def post_resource(data, resource, schema, txn, idl):
     if resource.relation == OVSDB_SCHEMA_CHILD:
         # create new row, populate it with data
         # add it as a reference to the parent resource
-        new_row = utils.setup_new_row(resource.next, verified_data,
-                                      schema, txn, idl)
+        new_row = utils.setup_new_row_by_resource(resource.next, verified_data,
+                                                  schema, txn, idl)
 
         ref = schema.ovs_tables[resource.table].references[resource.column]
         if ref.kv_type:
@@ -76,12 +76,13 @@ def post_resource(data, resource, schema, txn, idl):
     elif resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
         # row for a back referenced item contains the parent's reference
         # in the verified data
-        new_row = utils.setup_new_row(resource.next, verified_data,
-                                      schema, txn, idl)
+        new_row = utils.setup_new_row_by_resource(resource.next, verified_data,
+                                                  schema, txn, idl)
 
     elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
-        new_row = utils.setup_new_row(resource.next, verified_data,
-                                      schema, txn, idl)
+        new_row = utils.setup_new_row_by_resource(resource.next, verified_data,
+                                                  schema, txn, idl)
+
         # a non-root table entry MUST be referenced elsewhere
         if OVSDB_SCHEMA_REFERENCED_BY in verified_data:
             for reference in verified_data[OVSDB_SCHEMA_REFERENCED_BY]:
