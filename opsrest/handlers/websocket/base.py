@@ -13,6 +13,7 @@
 #  under the License.
 
 import uuid
+import userauth
 from tornado import websocket
 from tornado.log import app_log
 from opsrest.utils.utils import redirect_http_to_https
@@ -110,3 +111,6 @@ class WSBaseHandler(websocket.WebSocketHandler):
                 break
 
         return new_id
+
+    def get_current_user(self):
+        return userauth.get_request_user(self)

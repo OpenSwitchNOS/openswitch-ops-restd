@@ -13,6 +13,7 @@
 #  under the License.
 
 import re
+import userauth
 import httplib
 import hashlib
 import json
@@ -34,8 +35,7 @@ from opsrest.utils.getutils import get_query_arg
 from opsrest.utils.utils import redirect_http_to_https
 from opsrest.utils.userutils import (
     check_authenticated,
-    check_method_permission,
-    get_current_user
+    check_method_permission
 )
 from tornado.log import app_log
 
@@ -95,6 +95,9 @@ class BaseHandler(web.RequestHandler):
         except Exception as e:
             self.on_exception(e)
             self.finish()
+
+    def get_current_user(self):
+        return userauth.get_request_user(self)
 
     def on_exception(self, e):
 
@@ -156,11 +159,14 @@ class BaseHandler(web.RequestHandler):
                 app_log.debug("Using resource_id=%s" % item_id)
                 if item_id:
                     result = yield self.controller.get(item_id,
-                                                       get_current_user(self),
-                                                       selector, query_arguments)
+                                                       self.get_current_user(),
+                                                       selector,
+                                                       query_arguments)
                 else:
-                    result = yield self.controller.get_all(get_current_user(self),
-                                                           selector, query_arguments)
+                    result = \
+                        yield self.controller.get_all(self.get_current_user(),
+                                                      selector,
+                                                      query_arguments)
 
             else:
                 raise TransactionFailed("Resource cannot handle If-Match")
@@ -214,8 +220,8 @@ class BaseHandler(web.RequestHandler):
                 auditlog_type = audit.AUDIT_USER_LOGIN
                 if USERNAME_KEY in self.request.arguments:
                     user = self.request.arguments[USERNAME_KEY][0]
-            if not user and get_current_user(self):
-                user = get_current_user(self)
+            if not user and self.get_current_user():
+                user = self.get_current_user()
             hostname = self.request.host
             addr = self.request.remote_ip
             # HTTP/1.1 Status Code Successful 2xx validation

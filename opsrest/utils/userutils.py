@@ -103,15 +103,11 @@ def check_authenticated(req_handler, req_method):
         raise NotAuthenticated
 
 
-def get_current_user(req_handler):
-    return userauth.get_request_user(req_handler)
-
-
 def check_method_permission(req_handler, method):
     # Check permissions only if authentication is enabled
     # Plus, OPTIONS is allowed for unauthenticated users
     if method != REQUEST_TYPE_OPTIONS:
-        username = get_current_user(req_handler)
+        username = req_handler.get_current_user()
         if username is None:
             if settings['auth_enabled']:
                 raise NotAuthenticated
