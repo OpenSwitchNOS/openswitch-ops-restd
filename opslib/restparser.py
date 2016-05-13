@@ -31,12 +31,18 @@ import ovs.util
 import ovs.daemon
 import ovs.db.idl
 
-from tornado.log import app_log
 
 # Global variables
 inflect_engine = inflect.engine()
 
 xml_tree = None
+
+# Schema constants
+OVSDB_SCHEMA_CONFIG = 'configuration'
+OVSDB_SCHEMA_STATS = 'statistics'
+OVSDB_SCHEMA_STATUS = 'status'
+OVSDB_CATEGORY_PERVALUE = 'per-value'
+OVSDB_CATEGORY_FOLLOWS = 'follows'
 
 
 # Convert name into all lower case and into plural (default) or singular format
@@ -236,28 +242,63 @@ class OVSReference(object):
 
 
 class OVSColumnCategory(object):
-    def __init__(self, value):
-        self.category = None
-        if isinstance(value, dict):
-            self.perValue = value.get("perValue", None)
-            self.follows = value.get("follows", None)
-            self.category = "configuration"
-        elif isinstance(value, (str, unicode)):
-            self.category = value
+    def __init__(self, category):
+        self.dynamic = False
+        self.value = None
+        self.validate(category)
+
+        # Process category type
+        if isinstance(category, dict):
+            per_value_list = category.get(OVSDB_CATEGORY_PERVALUE,
+                                          None)
+            self.per_value = {}
+
+            if per_value_list:
+                for value_dict in per_value_list:
+                    self.check_category(value_dict["category"])
+                    self.per_value[value_dict["value"]] = \
+                        value_dict["category"]
+
+            self.follows = category.get(OVSDB_CATEGORY_FOLLOWS,
+                                        None)
+            self.value = OVSDB_SCHEMA_CONFIG
+            self.dynamic = True
+
+        elif isinstance(category, (str, unicode)):
+            self.value = category
 
     def __str__(self):
-        return self.category
+        return self.value
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             return self.__dict__ == other.__dict__
         elif isinstance(other, (str, unicode)):
-            return self.category == other
+            return self.value == other
         else:
             return False
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def validate(self, category):
+        if category:
+            if isinstance(category, dict):
+                if not (OVSDB_CATEGORY_PERVALUE in category
+                        or OVSDB_CATEGORY_FOLLOWS in category):
+                    raise error.Error("Unknown category object "
+                                      "attributes")
+
+            elif isinstance(category, (str, unicode)):
+                self.check_category(category)
+            else:
+                raise error.Error("Unknown category type %s" % type(category))
+
+    def check_category(self, category):
+        if category not in [OVSDB_SCHEMA_CONFIG,
+                            OVSDB_SCHEMA_STATS,
+                            OVSDB_SCHEMA_STATUS]:
+            raise error.Error("Unknown category: %s" % value)
 
 
 class OVSTable(object):
@@ -285,6 +326,9 @@ class OVSTable(object):
         # Dictionary of statistics attributes (Read-only)
         # column name to OVSColumn object mapping
         self.stats = {}
+
+        # Dictionay with category that is an object type
+        self.dynamic = {}
 
         # Parent table name
         self.parent = None
@@ -332,9 +376,12 @@ class OVSTable(object):
             parser = ovs.db.parser.Parser(column_json, "column %s" % name)
             # The category can be a str or a object. The object inside can
             # have the following keys:
-            # perValue: matches the possible value with the desired category
-            # follows: Reference to the column used to determine the column category
-            category = OVSColumnCategory(parser.get_optional("category", [str, unicode, dict]))
+            # per-value: matches the possible value with the desired category
+            # follows: Reference to the column used to determine the column
+            #          category
+            category = OVSColumnCategory(parser.get_optional("category",
+                                                             [str, unicode,
+                                                              dict]))
             relationship = parser.get_optional("relationship", [str, unicode])
             mutable = parser.get_optional("mutable", [bool], True)
             ephemeral = parser.get_optional("ephemeral", [bool], False)
@@ -383,29 +430,17 @@ class OVSTable(object):
                 table.stats[column_name] = OVSColumn(table, column_name,
                                                      type_, is_optional,
                                                      True, category)
-            # the following code can be removed after schema change
-            # switchover
-            elif category == "child":
-                table.references[column_name] = OVSReference(type_,
-                                                             category,
-                                                             True,
-                                                             category)
-                table.references[column_name].column = OVSColumn(table,
-                                                                 column_name,
-                                                                 type_,
-                                                                 True,
-                                                                 True,
-                                                                 category)
-            elif category == "parent":
-                table.references[column_name] = OVSReference(type_,
-                                                             category,
-                                                             True,
-                                                             category)
-            elif category == "reference":
-                table.references[column_name] = OVSReference(type_,
-                                                             category,
-                                                             mutable,
-                                                             category)
+            # Add to the array the name of the dynamic column
+            if category.dynamic:
+                table.dynamic[column_name] = category
+
+        # Validate dynamic categories consistency
+        for column_name, category in table.dynamic.iteritems():
+            if category.follows is not None\
+               and category.follows not in table.columns:
+                raise error.Error("Follows column '%s'"
+                                  "doesn't exists at table '%s'"
+                                  % (category.follows, name))
 
         # TODO: indexes should be removed eventually
         table.indexes = []

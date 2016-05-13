@@ -17,6 +17,7 @@ import userauth
 import httplib
 import hashlib
 import json
+import traceback
 
 from tornado import web
 from tornado import gen
@@ -109,6 +110,8 @@ class BaseHandler(web.RequestHandler):
         # uncaught exceptions
         if not isinstance(e, APIException):
             app_log.debug("Caught unexpected exception:\n%s" % e)
+            # Logging traceback to unexpected exception.
+            app_log.debug(traceback.format_exc())
             self.set_status(httplib.INTERNAL_SERVER_ERROR)
         elif isinstance(e, NotAuthenticated) or \
                 isinstance(e, AuthenticationFailed):

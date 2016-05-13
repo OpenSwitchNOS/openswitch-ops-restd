@@ -1,4 +1,4 @@
-# Copyright (C) 2015 Hewlett Packard Enterprise Development LP
+# Copyright (C) 2015-2016 Hewlett Packard Enterprise Development LP
 #
 #  Licensed under the Apache License, Version 2.0 (the "License"); you may
 #  not use this file except in compliance with the License. You may obtain
@@ -19,7 +19,6 @@ from opsrest.transaction import OvsdbTransactionResult
 from opsrest.exceptions import MethodNotAllowed, DataValidationFailed
 from opsvalidator.error import ValidationError
 
-import httplib
 from tornado.log import app_log
 
 
@@ -44,6 +43,9 @@ def post_resource(data, resource, schema, txn, idl):
         if resource.next.next is None:
             break
         resource = resource.next
+
+    utils.update_resource_keys(resource.next, schema,
+                               idl, data[OVSDB_SCHEMA_CONFIG])
 
     if verify.verify_http_method(resource, schema,
                                  REQUEST_TYPE_CREATE) is False:

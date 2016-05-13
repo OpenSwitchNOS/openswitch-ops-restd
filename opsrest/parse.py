@@ -50,7 +50,7 @@ def parse_url_path(path, schema, idl, http_method='GET'):
                       OVSDB_SCHEMA_SYSTEM_URI)
         return None
 
-    resource = Resource(OVSDB_SCHEMA_SYSTEM_TABLE)
+    resource = Resource(OVSDB_SCHEMA_SYSTEM_TABLE, schema)
 
     if resource.table not in idl.tables:
         app_log.debug("[parse_url_path]: resource table not in idl tables")
@@ -70,7 +70,7 @@ def parse_url_path(path, schema, idl, http_method='GET'):
         parse(path, resource, schema, idl, http_method)
         return resource
     except Exception as e:
-        app_log.debug(e)
+        app_log.debug(str(e))
         app_log.debug('resource not found')
         return None
 
@@ -122,7 +122,7 @@ def parse(path, resource, schema, idl, http_method):
         raise Exception
 
     # create the next resource
-    new_resource = Resource(path[0])
+    new_resource = Resource(path[0], schema)
     resource.next = new_resource
     path = path[1:]
 
