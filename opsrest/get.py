@@ -148,7 +148,7 @@ def get_collection_json(resource, schema, idl, uri, selector, depth):
 
 
 def get_row_json(row, table, schema, idl, uri, selector=None,
-                 depth=0, depth_counter=0):
+                 depth=0, depth_counter=0, with_empty_values=False):
 
     depth_counter += 1
     db_table = idl.tables[table]
@@ -173,8 +173,9 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
         config_data = utils.row_to_json(db_row, config_keys)
 
     # To remove the unnecessary empty values from the config data
-    config_data = {key: config_data[key] for key in config_keys
-                   if not getutils.is_empty_value(config_data[key])}
+    if not with_empty_values:
+        config_data = {key: config_data[key] for key in config_keys
+                       if not getutils.is_empty_value(config_data[key])}
 
     stats_keys = {}
     stats_data = {}
@@ -183,8 +184,9 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
         stats_data = utils.row_to_json(db_row, stats_keys)
 
     # To remove all the empty columns from the satistics data
-    stats_data = {key: stats_data[key] for key in stats_keys
-                  if not getutils.is_empty_value(stats_data[key])}
+    if not with_empty_values:
+        stats_data = {key: stats_data[key] for key in stats_keys
+                      if not getutils.is_empty_value(stats_data[key])}
 
     status_keys = {}
     status_data = {}
@@ -193,8 +195,9 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
         status_data = utils.row_to_json(db_row, status_keys)
 
     # To remove all the empty columns from the status data
-    status_data = {key: status_data[key] for key in status_keys
-                   if not getutils.is_empty_value(status_data[key])}
+    if not with_empty_values:
+        status_data = {key: status_data[key] for key in status_keys
+                       if not getutils.is_empty_value(status_data[key])}
 
     # Categorize references
     references = keys[OVSDB_SCHEMA_REFERENCE]
