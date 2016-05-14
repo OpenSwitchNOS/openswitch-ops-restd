@@ -13,7 +13,7 @@
 #  under the License.
 
 from opsrest.constants import *
-from opsrest.utils import utils
+from opsrest.utils import utils, getutils
 from opsrest import verify
 from opsrest import get
 from opsrest.transaction import OvsdbTransactionResult
@@ -169,7 +169,8 @@ def get_current_row(resource_update, uri, schema, idl):
     # Get a JSON representation of the row to patch
     uri = get._get_uri(resource_update, schema, uri)
     row_json = get.get_row_json(resource_update.row, resource_update.table,
-                                schema, idl, uri, OVSDB_SCHEMA_CONFIG)
+                                schema, idl, uri, OVSDB_SCHEMA_CONFIG,
+                                with_empty_values=True)
     row_json = row_json[OVSDB_SCHEMA_CONFIG]
 
     app_log.debug("Pre-patch row_json -> %s" % row_json)
@@ -195,9 +196,9 @@ def apply_patch(patch, row_json, resource_update=None, schema=None):
         app_log.debug("Post-patch pre-hack row_json -> %s" % patched_row_json)
         # TODO remove this ugly hack after fix in GET behavior is merged
         # (bug #127)
-        patched_row_json = remove_empty_optional_columns_hack(schema,
-                                                              resource_update,
-                                                              patched_row_json)
+        patched_row_json = remove_empty_optional_columns(schema,
+                                                         resource_update,
+                                                         patched_row_json)
         app_log.debug("Post-patch post-hack row_json -> %s" % patched_row_json)
 
     return patched_row_json
@@ -291,8 +292,7 @@ def refill_removed_columns(patch, data, resource, schema):
         return data
 
 
-# TODO Remove this ugly hack after bug #127 is fixed
-def remove_empty_optional_columns_hack(schema, resource_update, data):
+def remove_empty_optional_columns(schema, resource_update, data):
     '''
     This removes any optional column whose value is default
     For int, real, and string, the column is removed only
@@ -301,14 +301,6 @@ def remove_empty_optional_columns_hack(schema, resource_update, data):
     config_keys = schema.ovs_tables[resource_update.table].config
     for key in config_keys:
         if key in data and config_keys[key].is_optional:
-            if data[key] == {} or data[key] == []:
+            if getutils.is_empty_value(data[key]):
                 del data[key]
-            elif data[key] == "" and (config_keys[key].rangeMin > 0 or
-                                      config_keys[key].enum):
-                del data[key]
-            elif (data[key] == 0 or data[key] == 0.0) and \
-                (config_keys[key].rangeMin > 0 or
-                 config_keys[key].rangeMax < 0):
-                del data[key]
-
     return data
