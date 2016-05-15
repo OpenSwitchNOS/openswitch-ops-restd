@@ -1,0 +1,9 @@
+Verified+1: Zuul <zuul@lists.openswitch.net>
+Code-Review+2: Neeta Bhat <neeta.bhat@hpe.com>
+Verified+2: Chinh Le <chinh.le@hpe.com>
+Workflow+1: Chinh Le <chinh.le@hpe.com>
+Submitted-by: Chinh Le <chinh.le@hpe.com>
+Submitted-at: Sun, 15 May 2016 01:54:28 +0000
+Reviewed-on: https://review.openswitch.net/8990
+Project: openswitch/ops-restd
+Branch: refs/heads/feature/notifications
