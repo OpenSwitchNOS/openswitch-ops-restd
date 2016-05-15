@@ -17,13 +17,40 @@ import types
 import ops.utils
 import ops.constants
 import urllib
-
+from validatoradapter import ValidatorAdapter
+from opsrest.constants import (REQUEST_TYPE_CREATE,
+                               REQUEST_TYPE_UPDATE,
+                               REQUEST_TYPE_DELETE
+                                )
 
 global_ref_list = {}
+
+def is_row_unchanged(table_name, row, row_data, extschema, idl):
+    '''
+    Returns True if the row is unchanged.
+    '''
+    table_schema = extschema.ovs_tables[table_name]
+    config_keys = table_schema.config.keys()
+
+    for col in idl.tables[table_name].columns:
+        if col not in config_keys:
+            continue
+
+        if col in row_data:
+            # Check if OVSDB column value is same as the input config value
+            if row.__getattr__(col) != row_data[col]:
+                return False
+        else:
+            empty_val = ops.utils.get_empty_by_basic_type(row.__getattr__(col))
+            if row.__getattr__(col) != empty_val:
+                return False
+
+    return True
 
 
 # FIXME: ideally this info should come from extschema
 def is_immutable_table(table, extschema):
+    # TODO: Remove this list after implementing dynamic categories
     default_tables = ['Bridge', 'VRF']
     if extschema.ovs_tables[table].mutable and table not in default_tables:
         return False
@@ -39,7 +66,8 @@ def _index_to_row(index, table, extschema, idl):
     return row
 
 
-def _delete(row, table, extschema, idl, txn):
+def _delete(row, table, extschema, idl, txn, validator_adapter,
+            parent_row = None, parent_table = None):
     for key in extschema.ovs_tables[table].children:
         if key in extschema.ovs_tables[table].references:
             child_table_name = extschema.ovs_tables[table].references[key].ref_table
@@ -52,12 +80,15 @@ def _delete(row, table, extschema, idl, txn):
                     child_uuid_list.append(item.uuid)
                 while child_uuid_list:
                     child = idl.tables[child_table_name].rows[child_uuid_list[0]]
-                    _delete(child, child_table_name, extschema, idl, txn)
+                    _delete(child, child_table_name, extschema, idl, txn,
+                            validator_adapter, row, table)
                     child_uuid_list.pop(0)
-    row.delete()
+    # Add to validator adapter for validation and deletion
+    validator_adapter.add_resource_op(REQUEST_TYPE_DELETE, row, table,
+                                      parent_row, parent_table)
 
 
-def setup_table(table_name, data, extschema, idl, txn):
+def setup_table(table_name, data, extschema, idl, txn, validator_adapter):
 
     # table is missing from config json
     if table_name not in data:
@@ -65,14 +96,21 @@ def setup_table(table_name, data, extschema, idl, txn):
             # if mutable, empty table
             table_rows = idl.tables[table_name].rows.values()
             while table_rows:
-                _delete(table_rows[0], table_name, extschema, idl, txn)
+                _delete(table_rows[0], table_name, extschema, idl, txn,
+                        validator_adapter)
                 table_rows = idl.tables[table_name].rows.values()
         return
     else:
         # update table
         tabledata = data[table_name]
         for rowindex, rowdata in tabledata.iteritems():
-            setup_row({rowindex:rowdata}, table_name, extschema, idl, txn)
+
+            (row_dict, _is_new, _row_unchanged_flag) = setup_row({rowindex:rowdata}, table_name,
+                                         extschema, idl, txn, validator_adapter)
+            if row_dict is not None and not _row_unchanged_flag:
+                op = REQUEST_TYPE_CREATE if _is_new else REQUEST_TYPE_UPDATE
+                validator_adapter.add_resource_op(op, row_dict.values()[0],
+                                                  table_name)
 
 
 def setup_references(table, data, extschema, idl):
@@ -164,7 +202,8 @@ def setup_row_references(rowdata, table, extschema, idl):
             setup_row_references({index:data}, child_table, extschema, idl)
 
 
-def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
+def setup_row(rowdata, table_name, extschema, idl, txn,
+              validator_adapter, row=None):
     """
     set up rows recursively
     """
@@ -175,13 +214,14 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
 
     # get row reference from table
     _new = False
+    _row_unchanged_flag = False
     if row is None:
         row = ops.utils.index_to_row(row_index, table_schema, idl)
 
     if row is None:
         # do not add row to an immutable table
         if is_immutable_table(table_name, extschema):
-            return (None, None)
+            return (None, None, False)
 
         row = txn.insert(idl.tables[table_name])
         _new = True
@@ -189,6 +229,9 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
         if table_name not in global_ref_list:
             global_ref_list[table_name] = {}
         global_ref_list[table_name][row_index] = row
+    else:
+        _row_unchanged_flag = is_row_unchanged(table_name, row, row_data,
+                                               extschema, idl)
 
     config_keys = table_schema.config.keys()
     for key in config_keys:
@@ -254,8 +297,17 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
                     if len(new_data) > 1:
                         raise Exception('only one reference allowed in column %s of table %s' % (key, table_name))
                     if not kv_type:
-                        (_child, is_new) = setup_row(new_data, child_table_name, extschema, idl, txn)
-                        row.__setattr__(key, _child.values()[0])
+                        (_child, is_new, unchanged) = setup_row(new_data, child_table_name, extschema, idl, txn, validator_adapter)
+                        if  _child is not None:
+                            if not unchanged:
+                                op = REQUEST_TYPE_CREATE if is_new else REQUEST_TYPE_UPDATE
+                                validator_adapter.add_resource_op(op, _child.values()[0],
+                                                              child_table_name,
+                                                              row,
+                                                              table_name)
+                            if is_new:
+                                _row_unchanged_flag = False
+                            row.__setattr__(key, _child.values()[0])
 
                 # kv type children references
                 elif kv_type:
@@ -283,7 +335,9 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
 
                         if not is_immutable_table(child_table_name, extschema):
                             while delete_list:
-                                _delete(delete_list[0], child_table_name, extschema, idl, txn)
+                                _delete(delete_list[0], child_table_name,
+                                        extschema, idl, txn, validator_adapter,
+                                        row, table_name)
                                 delete_list.pop(0)
 
                     children = {}
@@ -295,12 +349,19 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
                             index = int(index)
 
                         if index in column_data:
-                            (_child, is_new) = setup_row(child, child_table_name, extschema, idl, txn, column_data[index])
+                            (_child, is_new, unchanged) = setup_row(child, child_table_name, extschema, idl, txn, validator_adapter, column_data[index])
                         else:
-                            (_child, is_new) = setup_row(child, child_table_name, extschema, idl, txn)
+                            (_child, is_new, unchanged) = setup_row(child, child_table_name, extschema, idl, txn, validator_adapter)
 
                         if _child is not None:
-
+                            if  not unchanged:
+                                op = REQUEST_TYPE_CREATE if is_new else \
+                                     REQUEST_TYPE_UPDATE
+                                validator_adapter.add_resource_op(op, _child.values()[0],
+                                                                  child_table_name, row,
+                                                                  table_name)
+                            if is_new:
+                                _row_unchanged_flag = False
                             # TODO: Support other types
                             if key_type == 'integer':
                                 children.update({int(_child.keys()[0]):_child.values()[0]})
@@ -333,13 +394,21 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
 
                         if not is_immutable_table(child_table_name, extschema):
                             while delete_list:
-                                _delete(delete_list[0], child_table_name, extschema, idl, txn)
+                                _delete(delete_list[0], child_table_name, extschema, idl, txn, validator_adapter, row, table_name)
                                 delete_list.pop(0)
 
                     children = {}
                     for index, child_data in new_data.iteritems():
-                        (_child, is_new) = setup_row({index:child_data}, child_table_name, extschema, idl, txn)
+                        (_child, is_new, unchanged) = setup_row({index:child_data}, child_table_name, extschema, idl, txn, validator_adapter)
                         if _child is not None:
+                            if not unchanged:
+                                op = REQUEST_TYPE_CREATE if is_new else \
+                                 REQUEST_TYPE_UPDATE
+                                validator_adapter.add_resource_op(op, _child.values()[0],
+                                                              child_table_name, row,
+                                                              table_name)
+                            if is_new:
+                                _row_unchanged_flag = False
                             children.update(_child)
 
                     if not extschema.ovs_tables[child_table_name].index_columns:
@@ -386,7 +455,8 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
                     # NOTE: delete only from immutable table
                     if not is_immutable_table(key, extschema):
                         while delete_list:
-                            _delete(delete_list[0], key, extschema, idl, txn)
+                            _delete(delete_list[0], key, extschema, idl, txn,
+                                    validator_adapter, row, table_name)
                             delete_list.pop(0)
 
                 # set up children rows
@@ -399,10 +469,18 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
                         for _x in split_x:
                             tmp.append(urllib.quote(str(_x), safe=''))
                         x = '/'.join(tmp)
-                        (child, is_new) = setup_row({x:y}, key, extschema, idl, txn)
+                        (child, is_new, unchanged) = setup_row({x:y}, key, extschema, idl,
+                                                    txn, validator_adapter)
+                        if child is not None and not unchanged:
+                            op = REQUEST_TYPE_CREATE if is_new else \
+                            REQUEST_TYPE_UPDATE
+                            validator_adapter.add_resource_op(op,
+                                                              child.values()[0],
+                                                              child_table_name,
+                                                              row, table_name)
+                            # fill the parent reference column
+                            if is_new:
+                                _row_unchanged_flag = False
+                                child.values()[0].__setattr__(column_name, row)
 
-                        # fill the parent reference column
-                        if child is not None and is_new:
-                            child.values()[0].__setattr__(column_name, row)
-
-    return ({row_index:row}, _new)
+    return ({row_index: row}, _new, _row_unchanged_flag)
