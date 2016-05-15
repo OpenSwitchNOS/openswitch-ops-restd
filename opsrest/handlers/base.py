@@ -14,7 +14,6 @@
 
 import re
 import userauth
-import rbac
 import httplib
 import hashlib
 import json
@@ -24,14 +23,20 @@ from tornado import web
 from tornado import gen
 
 from opsrest.constants import *
-from opsrest.exceptions import APIException, TransactionFailed, \
-    ParameterNotAllowed, NotAuthenticated, \
-    AuthenticationFailed, ForbiddenMethod
-from opsrest.settings import settings
+from opsrest.exceptions import (
+    APIException,
+    AuthenticationFailed,
+    NotAuthenticated,
+    ParameterNotAllowed,
+    TransactionFailed
+)
 from opsrest.utils.auditlogutils import audit_log_user_msg, audit
 from opsrest.utils.getutils import get_query_arg
 from opsrest.utils.utils import redirect_http_to_https
-
+from opsrest.utils.userutils import (
+    check_authenticated,
+    check_method_permission
+)
 from tornado.log import app_log
 
 
@@ -56,16 +61,10 @@ class BaseHandler(web.RequestHandler):
                           self.request.remote_ip,
                           self.request)
 
-            if settings['auth_enabled'] and self.request.method != "OPTIONS":
-                is_authenticated = userauth.is_user_authenticated(self)
-            else:
-                is_authenticated = True
-
-            if not is_authenticated:
-                raise NotAuthenticated
+            check_authenticated(self, self.request.method)
 
             # Check user's permissions
-            self.check_method_permission()
+            check_method_permission(self, self.request.method)
 
             sort = get_query_arg(REST_QUERY_PARAM_SORTING,
                                  self.request.query_arguments)
@@ -86,11 +85,7 @@ class BaseHandler(web.RequestHandler):
                                            REST_QUERY_PARAM_KEYS,
                                            REQUEST_TYPE_READ))
 
-        except APIException as e:
-            self.on_exception(e)
-            self.finish()
-
-        except Exception, e:
+        except Exception as e:
             self.on_exception(e)
             self.finish()
 
@@ -160,10 +155,13 @@ class BaseHandler(web.RequestHandler):
                 if item_id:
                     result = yield self.controller.get(item_id,
                                                        self.get_current_user(),
-                                                       selector, query_arguments)
+                                                       selector,
+                                                       query_arguments)
                 else:
-                    result = yield self.controller.get_all(self.get_current_user(),
-                                                           selector, query_arguments)
+                    result = \
+                        yield self.controller.get_all(self.get_current_user(),
+                                                      selector,
+                                                      query_arguments)
 
             else:
                 raise TransactionFailed("Resource cannot handle If-Match")
@@ -225,19 +223,3 @@ class BaseHandler(web.RequestHandler):
             result = int(200 <= self.get_status() < 300)
             audit_log_user_msg(op, auditlog_type, uri, cfgdata, user,
                                hostname, addr, result, self.error_message)
-
-    def check_method_permission(self):
-
-        method = self.request.method
-
-        # Check permissions only if authentication is enabled
-        # Plus, OPTIONS is allowed for unauthenticated users
-        if method != REQUEST_TYPE_OPTIONS:
-            username = self.get_current_user()
-            if username is None:
-                if settings['auth_enabled']:
-                    raise NotAuthenticated
-            else:
-                permissions = rbac.get_user_permissions(username)
-                if METHOD_PERMISSION_MAP[method] not in permissions:
-                    raise ForbiddenMethod

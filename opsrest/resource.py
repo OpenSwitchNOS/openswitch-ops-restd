@@ -18,7 +18,7 @@
       - Resource.table: name of the OVSDB table this resource belongs to
       - Resource.row: UUID of the row in which this resource is found
       - Resource.column: name of the column in the table under which
-        this resource is found
+        the next resource is found
 '''
 
 from constants import *
