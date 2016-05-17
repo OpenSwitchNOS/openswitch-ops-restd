@@ -28,6 +28,11 @@ def get_row_data(row, table_name, schema, idl, index=None):
     if table_name == 'Route' and row.__getattr__('from') != 'static':
         return
 
+    if table_name == 'VLAN' and \
+        row.__getattr__('internal_usage') is not None and \
+        row.__getattr__('internal_usage'):
+        return
+
     # Iterate over all columns in the row
     table_schema = schema.ovs_tables[table_name]
     for column_name in table_schema.config.keys():

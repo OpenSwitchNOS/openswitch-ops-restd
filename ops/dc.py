@@ -39,17 +39,22 @@ def register(extschema, ovsschema, ovsremote):
 
         # configuration columns
         config_columns = [str(key) for key in tableschema.config.keys()]
+
+        # TODO: remove status columns when dynamic category fully supported
+        status_columns = [str(key) for key in tableschema.status.keys()]
+
         # reference columns
         reference_columns = [str(key) for key in tableschema.references.keys()]
 
 
         # index columns
         for item in tableschema.index_columns:
-            if not item in config_columns:
+            if (not item in config_columns) and (not item in status_columns):
                 register_columns.append(str(item))
 
         register_columns += config_columns
         register_columns += reference_columns
+        register_columns += status_columns
 
         schema_helper.register_columns(str(tablename), register_columns)
 
