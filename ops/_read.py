@@ -145,7 +145,8 @@ def get_row_data(row, table_name, schema, idl, index=None):
             elif isinstance(references, dict):
                 refdata = {}
                 for key, ref in references.iteritems():
-                    ref_index = ops.utils.row_to_index(ref_table_name,
+                    ref_index = ops.utils.row_to_index(ref,
+                                                       ref_table_name,
                                                        schema, idl)
                     refdata.update({str(key): str(ref_index)})
             elif isinstance(references, list):
