@@ -261,7 +261,7 @@ class OVSColumnCategory(object):
 
             self.follows = category.get(OVSDB_CATEGORY_FOLLOWS,
                                         None)
-            self.value = OVSDB_SCHEMA_CONFIG
+            self.value = OVSDB_SCHEMA_STATUS
             self.dynamic = True
 
         elif isinstance(category, (str, unicode)):
