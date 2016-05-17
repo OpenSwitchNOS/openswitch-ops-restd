@@ -25,6 +25,7 @@ from opsrest.constants import *
 from opsvalidator import validator
 from tornado.log import app_log
 from copy import deepcopy
+from opsrest.exceptions import DataValidationFailed
 
 
 def get_row_from_resource(resource, idl):
@@ -822,9 +823,11 @@ def update_category_keys(keys, row, idl, schema, table):
             if source_column in row:
                 column_data = row[source_column]
             else:
-                # Nothing to do, there isn't source column to
-                # take decision
-                continue
+                app_log.debug("per-value column '%s' is not present"
+                              % source_column)
+                raise Exception("Attribute '%s' is required "
+                                "by attribute '%s'."
+                                % (source_column, column_name))
 
         # Set the new category
         # Get new category for that value using per-value data
@@ -876,5 +879,8 @@ def update_resource_keys(resource, schema, idl, data=None):
     elif resource.row:
         row = get_row_from_resource(resource, idl)
 
-    resource.keys = update_category_keys(resource.keys, row, idl,
-                                         schema, resource.table)
+    try:
+        resource.keys = update_category_keys(resource.keys, row, idl,
+                                             schema, resource.table)
+    except Exception as e:
+        raise DataValidationFailed(str(e))
