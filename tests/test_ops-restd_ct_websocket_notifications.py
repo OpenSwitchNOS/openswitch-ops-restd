@@ -23,8 +23,10 @@ from opsvsiutils.restutils.utils import (
     execute_request,
     get_switch_ip,
     get_ssl_context,
+    get_server_crt,
     login,
     PORT_DATA,
+    remove_server_crt,
     rest_sanity_check
 )
 from copy import deepcopy
@@ -153,11 +155,13 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         TestWebSocketEvents.test_var = WebSocketEventTest()
         cls.switch_ip = cls.test_var.switch_ip
         cls.switch = cls.test_var.switch
+        get_server_crt(cls.switch)
         rest_sanity_check(cls.switch_ip)
         cls.cookie_header = login(cls.switch_ip)
 
     def teardown_class(cls):
         TestWebSocketEvents.test_var.net.stop()
+        remove_server_crt()
 
     def setup_method(self, method):
         pass
