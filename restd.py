@@ -15,6 +15,8 @@ import ovs.unixctl
 import ovs.unixctl.server
 import ops_diagdump
 import tornado.http1connection
+import ovs.vlog
+import argparse
 
 # enable logging
 from tornado.log import enable_pretty_logging
@@ -73,6 +75,11 @@ def main():
     global app, HTTPS_server, HTTP_server
 
     options.parse_command_line()
+    parser = argparse.ArgumentParser()
+    ovs.vlog.add_args(parser)
+    args = parser.parse_args()
+    ovs.vlog.handle_args(args)
+
     app_log.debug("Creating OVSDB API Application!")
     app = OvsdbApiApplication(settings)
 
