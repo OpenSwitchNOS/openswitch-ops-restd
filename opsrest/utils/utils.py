@@ -346,12 +346,16 @@ def set_reference_items(row, data, reference_keys):
     for key in reference_keys:
         if key in data:
             if isinstance(data[key], ovs.db.idl.Row):
-                row.__setattr__(key, data[key])
+                reflist = data[key]
             elif type(data[key]) is types.ListType:
                 reflist = []
                 for item in data[key]:
                     reflist.append(item)
-                row.__setattr__(key, reflist)
+            else:
+                reflist = {}
+                for k, v in data[key].iteritems():
+                    reflist.update({k: v})
+            row.__setattr__(key, reflist)
 
 
 def get_attribute_and_type(row, ovs_column):
