@@ -19,7 +19,8 @@ import uuid
 import six
 
 import ovs.db.types as ovs_types
-
+import ops.constants
+import opsrest.utils.utils
 
 def unquote_split(s_in):
     if isinstance(s_in, six.string_types):
@@ -149,3 +150,93 @@ def index_to_row(index, table_schema, idl):
 
         # find in IDL index_map
         return idl.index_to_row_lookup(index_values, table_schema.name)
+
+
+def delete_row_check(row, table, extschema, idl):
+    table_schema = extschema.ovs_tables[table]
+    if table_schema.dynamic:
+        categories = ops.utils.get_row_categories(row, table, extschema, idl)
+        if has_config_category(categories):
+            if has_config_index(table, categories):
+                return True
+    elif not is_immutable_table(table, extschema):
+        return True
+
+    # all other cases
+    return False
+
+
+def insert_row_check(data, table, extschema, idl, txn):
+
+    table_schema = extschema.ovs_tables[table]
+    if table_schema.dynamic or not is_immutable(table, extschema):
+        row = txn.insert(idl.tables[table])
+        for key in table_schema.config.keys():
+            if key in row_data:
+                value = row_data[key]
+                row.__setattr__(key, value)
+
+        for key in table_schema.indexes:
+            if key is 'uuid':
+                continue
+
+            if key not in table_schema.config.keys() and key in row_data:
+                row.__setattr__(key, row_data[key])
+
+        # get dynamic categories
+        categories = get_dynamic_categories(row, table, extschema, idl)
+        if has_config_category(categories):
+            if has_config_index(table, categories):
+                return row
+
+        # row cannot be added as there is no config category
+        row.delete()
+    return None
+
+
+def get_default_categories(table, extschema):
+    table_schema = extschema.ovs_tables[table]
+    categories = {ops.constants.OVSDB_SCHEMA_CONFIG: table_schema.config,
+            ops.constants.OVSDB_SCHEMA_STATUS: table_schema.status,
+            ops.constants.OVSDB_SCHEMA_STATS:  table_schema.stats,
+            ops.constants.OVSDB_SCHEMA_REFERENCE: table_schema.references}
+    return categories
+
+
+def get_dynamic_categories(row, table, extschema, idl):
+    categories = get_default_categories(table, extschema)
+    table_schema = extschema.ovs_tables[table]
+    if table_schema.dynamic:
+        return opsrest.utils.utils.update_category_keys(categories,
+                                                        row, idl,
+                                                        extschema,
+                                                        table)
+    else:
+        return categories
+
+
+def has_config_category(categories):
+    if not categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
+        for k, v in categories[ops.constants.OVSDB_SCHEMA_REFERENCE].iteritems():
+            if v.category == ops.constants.OVSDB_SCHEMA_CONFIG:
+                return True
+        return False
+    return True
+
+
+def has_config_index(table, extschema, categories):
+    index_columns = extschema.ovs_tables[table].index_columns
+    for index in index_columns:
+        if index in categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
+            return True
+        elif index in categories[ops.constants.OVSDB_SCHEMA_REFERENCE]:
+            if categories[ops.constants.OVSDB_SCHEMA_REFERENCE][index].category ==\
+                    ops.constants.OVSDB_SCHEMA_CONFIG:
+                        return True
+    return False
+
+def is_immutable_table(table, extschema):
+    default_tables = ['Bridge', 'VRF']
+    if extschema.ovs_tables[table].mutable and table not in default_tables:
+        return False
+    return True

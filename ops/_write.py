@@ -14,20 +14,14 @@
 
 import types
 
+import ovs.db.idl
+
 import ops.utils
 import ops.constants
 import urllib
 
 
 global_ref_list = {}
-
-
-# FIXME: ideally this info should come from extschema
-def is_immutable_table(table, extschema):
-    default_tables = ['Bridge', 'VRF']
-    if extschema.ovs_tables[table].mutable and table not in default_tables:
-        return False
-    return True
 
 
 def _index_to_row(index, table, extschema, idl):
@@ -39,40 +33,65 @@ def _index_to_row(index, table, extschema, idl):
     return row
 
 
+def _delete_rows(delete_list, table, extschema, idl, txn):
+    for uuid in delete_list:
+        row = idl.tables[table].rows[uuid]
+        _delete(row, table, extschema, idl, txn)
+
+
 def _delete(row, table, extschema, idl, txn):
+
+    # delete only those children that are configurable
+    delete_row = True
     for key in extschema.ovs_tables[table].children:
         if key in extschema.ovs_tables[table].references:
-            child_table_name = extschema.ovs_tables[table].references[key].ref_table
-            child_ref_list = row.__getattr__(key)
-            if isinstance(child_ref_list, types.DictType):
-                child_ref_list = child_ref_list.values()
-            if child_ref_list:
-                child_uuid_list = []
-                for item in child_ref_list:
-                    child_uuid_list.append(item.uuid)
-                while child_uuid_list:
-                    child = idl.tables[child_table_name].rows[child_uuid_list[0]]
-                    _delete(child, child_table_name, extschema, idl, txn)
-                    child_uuid_list.pop(0)
-    row.delete()
+
+            child_table = extschema.ovs_tables[table].references[key].ref_table
+            child_references = row.__getattr__(key)
+
+            if not child_references:
+                continue
+            elif isinstance(child_references, ovs.db.idl.Row):
+                child_references = [child_references]
+            elif isinstance(child_references, types.DictType):
+                child_references = child_references.values()
+
+            delete_list = []
+            for child_row in child_references:
+                if ops.utils.delete_row_check(child_row, child_table, extschema, idl):
+                    delete_list.append(child_row.uuid)
+
+            # do not delete row if at least one child remains
+            if delete_row:
+                if len(child_references) > len(delete_list):
+                    delete_row = False
+
+            # delete rows
+            _delete_rows(delete_list, child_table, extschema, idl, txn)
+
+    # delete row only if all its children are deleted
+    if delete_row:
+        row.delete()
 
 
-def setup_table(table_name, data, extschema, idl, txn):
+def setup_table(table, data, extschema, idl, txn):
 
-    # table is missing from config json
-    if table_name not in data:
-        if not is_immutable_table(table_name, extschema):
-            # if mutable, empty table
-            table_rows = idl.tables[table_name].rows.values()
-            while table_rows:
-                _delete(table_rows[0], table_name, extschema, idl, txn)
-                table_rows = idl.tables[table_name].rows.values()
-        return
+    table_schema = extschema.ovs_tables[table]
+    # table is missing from applied config
+    if table not in data:
+
+        delete_list = []
+        for uuid, row in idl.tables[tables].rows.iteritems():
+            if delete_row_check(row, table, extschema, idl):
+                delete_list.append(uuid)
+
+        # delete rows
+        _delete_rows(delete_list, table, extschema, idl, txn)
     else:
         # update table
-        tabledata = data[table_name]
+        tabledata = data[table]
         for rowindex, rowdata in tabledata.iteritems():
-            setup_row({rowindex:rowdata}, table_name, extschema, idl, txn)
+            setup_row({rowindex:rowdata}, table, extschema, idl, txn)
 
 
 def setup_references(table, data, extschema, idl):
@@ -93,7 +112,7 @@ def setup_row_references(rowdata, table, extschema, idl):
 
     row = _index_to_row(row_index, table, extschema, idl)
     if row is None:
-        if not is_immutable_table(table, extschema):
+        if not ops.utils.is_immutable_table(table, extschema):
             raise Exception('Row with index %s not found' % row_index)
         return
 
@@ -180,11 +199,11 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
 
     if row is None:
         # do not add row to an immutable table
-        if is_immutable_table(table_name, extschema):
+        row = ops.utils.insert_row_check(row_data, table_name, extschema, idl, txn)
+        if not row:
             return (None, None)
-
-        row = txn.insert(idl.tables[table_name])
-        _new = True
+        else:
+            _new = True
 
         if table_name not in global_ref_list:
             global_ref_list[table_name] = {}
@@ -232,7 +251,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
 
             # no children case
             if key not in row_data or not row_data[key]:
-                if not is_immutable_table(child_table_name, extschema):
+                if not ops.utils.is_immutable_table(child_table_name, extschema):
                     if _new or row.__getattr__(key) is None:
                         continue
                     else:
@@ -281,7 +300,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
                             if index not in new_data:
                                 delete_list.append(item)
 
-                        if not is_immutable_table(child_table_name, extschema):
+                        if not ops.utils.is_immutable_table(child_table_name, extschema):
                             while delete_list:
                                 _delete(delete_list[0], child_table_name, extschema, idl, txn)
                                 delete_list.pop(0)
@@ -331,7 +350,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
                             if index not in new_data:
                                 delete_list.append(item)
 
-                        if not is_immutable_table(child_table_name, extschema):
+                        if not ops.utils.is_immutable_table(child_table_name, extschema):
                             while delete_list:
                                 _delete(delete_list[0], child_table_name, extschema, idl, txn)
                                 delete_list.pop(0)
@@ -388,7 +407,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
                                 delete_list.append(item)
 
                     # NOTE: delete only from immutable table
-                    if not is_immutable_table(key, extschema):
+                    if not ops.utils.is_immutable_table(key, extschema):
                         while delete_list:
                             _delete(delete_list[0], key, extschema, idl, txn)
                             delete_list.pop(0)
