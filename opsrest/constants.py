@@ -161,3 +161,6 @@ PATCH_OP_COPY = 'copy'
 # Types of callbacks for the manager
 CHANGES_CB_TYPE = 'changes_cb'
 ESTABLISHED_CB_TYPE = 'established_cb'
+
+# Key types
+INTEGER = 'integer'
