@@ -648,6 +648,20 @@ def verify_attribute_range(column_name, column_data, request_data):
             raise DataValidationFailed(error)
 
 
+def _get_row_from_uri(uri, schema, idl):
+
+    verified_resource = parse.parse_url_path(uri, schema, idl)
+    if verified_resource is None:
+        error = "Reference %s could not be identified" % uri
+        raise DataValidationFailed(error)
+
+    # get the Row instance of the reference we are adding
+    while verified_resource.next is not None:
+        verified_resource = verified_resource.next
+    row = utils.get_row_from_resource(verified_resource, idl)
+    return row
+
+
 def verify_forward_reference(data, resource, schema, idl):
     """
     converts the forward reference URIs to corresponding Row references
@@ -673,10 +687,17 @@ def verify_forward_reference(data, resource, schema, idl):
 
     for key in reference_keys:
         if key in data:
-            # this is either a URI or list of URIs
+            # this is either a URI or list of URIs or dictionary
+            table_schema = schema.ovs_tables[resource.table]
+            kv_type = table_schema.references[key].kv_type
             _refdata = data[key]
             notList = False
-            if not isinstance(_refdata, types.ListType):
+            # Verify if input is of DictType
+            if kv_type and not isinstance(_refdata, types.DictType):
+                error = "Reference needs to be a dictionary %s" % key
+                raise DataValidationFailed(error)
+
+            if not isinstance(_refdata, types.ListType) and not kv_type:
                 notList = True
                 _refdata = [_refdata]
 
@@ -686,22 +707,22 @@ def verify_forward_reference(data, resource, schema, idl):
             if len(_refdata) < _min or len(_refdata) > _max:
                 error = "Reference list is out of range for key %s" % key
                 raise DataValidationFailed(error)
+            if kv_type:
+                references = {}
+                key_type = table_schema.references[key].kv_key_type.name
+                for k, v in _refdata.iteritems():
+                    if key_type == INTEGER:
+                        k = int(k)
+                    row = _get_row_from_uri(v, schema, idl)
+                    references.update({k:row})
+            else:
+                references = []
+                for uri in _refdata:
+                    row = _get_row_from_uri(uri, schema, idl)
+                    references.append(row)
+                    if notList:
+                        references = references[0]
 
-            references = []
-            for uri in _refdata:
-                verified_resource = parse.parse_url_path(uri, schema, idl)
-                if verified_resource is None:
-                    error = "Reference %s could not be identified" % uri
-                    raise DataValidationFailed(error)
-
-                # get the Row instance of the reference we are adding
-                while verified_resource.next is not None:
-                    verified_resource = verified_resource.next
-                row = utils.get_row_from_resource(verified_resource, idl)
-                references.append(row)
-
-            if notList:
-                references = references[0]
             verified_references[key] = references
 
     return verified_references
