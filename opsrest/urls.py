@@ -14,6 +14,7 @@
 
 from opsrest.handlers.staticcontent import StaticContentHandler
 from opsrest.handlers.login import LoginHandler
+from opsrest.handlers.logout import LogoutHandler
 from opsrest.handlers.ovsdbapi import OVSDBAPIHandler
 from opsrest.handlers.customrest import CustomRESTHandler
 from opsrest.handlers.websocket.notifications import WSNotificationsHandler
@@ -27,6 +28,7 @@ url_patterns =\
     [(r'/login', LoginHandler),
      # TODO new handler for login API to replace /login above
      (r'/rest/v1/login', LoginHandler),
+     (r'/rest/v1/logout', LogoutHandler),
      (r'/rest/v1/ws/notifications', WSNotificationsHandler),
      (r'/rest/v1/system', OVSDBAPIHandler),
      (r'/rest/v1/system/.*', OVSDBAPIHandler)]
