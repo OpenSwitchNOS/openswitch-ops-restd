@@ -25,6 +25,8 @@ REGEX_RESOURCE_ID = '?(?P<resource_id>[A-Za-z0-9-_]+[$]?)?/?'
 
 url_patterns =\
     [(r'/login', LoginHandler),
+     # TODO new handler for login API to replace /login above
+     (r'/rest/v1/login', LoginHandler),
      (r'/rest/v1/ws/notifications', WSNotificationsHandler),
      (r'/rest/v1/system', OVSDBAPIHandler),
      (r'/rest/v1/system/.*', OVSDBAPIHandler)]
@@ -32,6 +34,8 @@ url_patterns =\
 custom_url_patterns =\
     [(r'/rest/v1/logs', CustomRESTHandler, LogController),
      (r'/account', CustomRESTHandler, AccountController),
+     # TODO new handler for account API to replace /account above
+     (r'/rest/v1/account', CustomRESTHandler, AccountController),
      (r'/rest/v1/system/full-configuration', CustomRESTHandler,
       ConfigController)]
 
