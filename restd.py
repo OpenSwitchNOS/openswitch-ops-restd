@@ -15,13 +15,17 @@ import ovs.unixctl
 import ovs.unixctl.server
 import ops_diagdump
 import tornado.http1connection
+
+import ops.dc
 import ovs.vlog
 import argparse
+vlog = ovs.vlog.Vlog('restd')
 
 # enable logging
 from tornado.log import enable_pretty_logging
 options.logging = settings['logging']
 enable_pretty_logging()
+
 
 
 def diag_basic_handler(argv):
