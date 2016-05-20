@@ -13,7 +13,6 @@
 #  under the License.
 
 import ovs.db.idl
-import json
 from tornado.locks import Event
 
 
@@ -43,7 +42,7 @@ class OvsdbTransaction:
             self.txn.abort()
 
     def get_error(self):
-        return json.loads(self.txn.get_error())
+        return self.txn.get_error()
 
 
 class OvsdbTransactionResult:

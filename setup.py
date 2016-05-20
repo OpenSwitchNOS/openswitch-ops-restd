@@ -27,8 +27,7 @@ setup(
               'opsrest.handlers.websocket',
               'opsrest.notifications',
               'opsrest.utils',
-              'opsvalidator',
-              'runconfig'],
+              'opsvalidator'],
     entry_points={
         'console_scripts': ['restd = restd:main', ]
     },
