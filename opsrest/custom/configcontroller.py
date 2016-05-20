@@ -23,7 +23,7 @@ from opsrest.exceptions import DataValidationFailed,\
 from opsrest.transaction import OvsdbTransactionResult
 from opsrest.custom.basecontroller import BaseController
 from opsrest.constants import CONFIG_TYPE_RUNNING,\
-    CONFIG_TYPE_STARTUP, SUCCESS, UNCHANGED, INCOMPLETE
+    CONFIG_TYPE_STARTUP, SUCCESS, UNCHANGED, INCOMPLETE, ERROR
 
 
 class ConfigController(BaseController):
@@ -42,26 +42,28 @@ class ConfigController(BaseController):
             error = None
             if request_type == CONFIG_TYPE_RUNNING:
                 self.txn = self.context.manager.get_new_transaction()
-                result = OvsdbTransactionResult(ops.dc.write(data, self.schema,
-                                                             self.idl,
-                                                             self.txn.txn))
-                status = result.status
+                (status, error) = ops.dc.write(data, self.schema,
+                                               self.idl, self.txn.txn)
                 app_log.debug('Transaction result: %s', status)
+
                 if status == INCOMPLETE:
                     self.context.manager.monitor_transaction(self.txn)
                     yield self.txn.event.wait()
                     status = self.txn.status
+                    if status == ERROR:
+                        error = self.txn.get_error()
             else:
                 # FIXME: This is a blocking call.
                 (status, error) = ops.cfgd.write(data)
+
             if status != SUCCESS:
                 if status == UNCHANGED:
                     raise NotModified
                 else:
                     if request_type == CONFIG_TYPE_RUNNING:
-                        error = self.txn.get_error()
                         self.txn.abort()
                     raise APIException("Error: %s" % error)
+
         except Exception as e:
             if self.txn:
                 self.txn.abort()
