@@ -1,7 +1,9 @@
-from opsrest.constants import *
+import ops.constants
 from opsvalidator import validator
 from opsvalidator.error import ValidationError
-from tornado.log import app_log
+
+import ovs.vlog
+vlog = ovs.vlog.Vlog('dc')
 
 
 class ResourceOperationData(object):
@@ -18,12 +20,12 @@ class ValidatorAdapter(object):
     """
     Adapter for the opsvalidator.validator module based on resource operations.
     """
-    def __init__(self, idl, schema):
+    def __init__(self, extschema, idl):
+        self.extschema = extschema
         self.idl = idl
-        self.schema = schema
-        self.resource_ops_dict = {REQUEST_TYPE_CREATE: [],
-                                  REQUEST_TYPE_UPDATE: [],
-                                  REQUEST_TYPE_DELETE: []}
+        self.resource_ops_dict = {ops.constants.REQUEST_TYPE_CREATE: [],
+                                  ops.constants.REQUEST_TYPE_UPDATE: [],
+                                  ops.constants.REQUEST_TYPE_DELETE: []}
         self.errors = []
 
     def has_errors(self):
@@ -31,11 +33,11 @@ class ValidatorAdapter(object):
 
     def add_resource_op(self, op, resource_row, resource_table,
                         p_resource_row=None, p_resource_table=None):
-        app_log.debug("Adding operation - op: " + op + ", " +
-                      "row: " + str(resource_row) + ", " +
-                      "table: " + resource_table + ", " +
-                      "parent row: " + str(p_resource_row) + ", " +
-                      "parent table: " + str(p_resource_table))
+        vlog.dbg("Adding operation - op: " + op + ", " +
+                 "row: " + str(resource_row) + ", " +
+                 "table: " + resource_table + ", " +
+                 "parent row: " + str(p_resource_row) + ", " +
+                 "parent table: " + str(p_resource_table))
 
         resource_op = ResourceOperationData(op, resource_row, resource_table,
                                             p_resource_row, p_resource_table)
@@ -50,18 +52,20 @@ class ValidatorAdapter(object):
         p_row = op_data.p_resource_row
 
         try:
-            validator.exec_validators(self.idl, self.schema, table_name,
+            validator.exec_validators(self.idl, self.extschema, table_name,
                                       row, method, p_table_name, p_row)
         except ValidationError as e:
-            app_log.info("Validation failed:")
-            app_log.info(e.error)
+            vlog.dbg(str(e.error))
             self.errors.append(e.error)
+            success = False
+
+        except Exception as e:
             success = False
 
         return success
 
     def _exec_deletion_validators_and_delete(self):
-        for delete_op_data in self.resource_ops_dict[REQUEST_TYPE_DELETE]:
+        for delete_op_data in self.resource_ops_dict[ops.constants.REQUEST_TYPE_DELETE]:
             success = self._exec_validator_with_op(delete_op_data)
 
             # Delete the row from the IDL
@@ -69,14 +73,14 @@ class ValidatorAdapter(object):
                 delete_op_data.resource_row.delete()
 
     def _exec_modification_validators(self):
-        for create_op_data in self.resource_ops_dict[REQUEST_TYPE_CREATE]:
+        for create_op_data in self.resource_ops_dict[ops.constants.REQUEST_TYPE_CREATE]:
             self._exec_validator_with_op(create_op_data)
 
-        for update_op_data in self.resource_ops_dict[REQUEST_TYPE_UPDATE]:
+        for update_op_data in self.resource_ops_dict[ops.constants.REQUEST_TYPE_UPDATE]:
             self._exec_validator_with_op(update_op_data)
 
     def exec_validators_with_ops(self):
-        app_log.debug("Executing validators for all ops..")
+        vlog.dbg("Executing validators for all ops..")
         # Deletion validations should occur first, since the deletions were
         # postponed in order to retain the row data for validations. Prior
         # to modification validations, the rows should actually be removed

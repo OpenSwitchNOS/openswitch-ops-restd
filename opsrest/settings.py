@@ -31,7 +31,6 @@ settings['ovs_remote'] = 'unix:/var/run/openvswitch/db.sock'
 settings['ovs_schema'] = '/usr/share/openvswitch/vswitch.ovsschema'
 settings['ext_schema'] = '/usr/share/openvswitch/vswitch.extschema'
 settings['auth_enabled'] = True
-settings['cookie_secret'] = '61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo='
 settings['cfg_db_schema'] = '/usr/share/openvswitch/configdb.ovsschema'
 
 settings["account_schema"] = os.path.join(os.path.dirname(custom.__file__),
