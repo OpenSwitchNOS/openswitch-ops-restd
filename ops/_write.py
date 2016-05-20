@@ -82,7 +82,7 @@ def setup_table(table, data, extschema, idl, txn):
     if table not in data:
 
         delete_list = []
-        for uuid, row in idl.tables[tables].rows.iteritems():
+        for uuid, row in idl.tables[table].rows.iteritems():
             if ops.utils.delete_row_check(row, table, extschema, idl):
                 delete_list.append(uuid)
 
@@ -213,7 +213,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
     else:
         ops.utils.set_config_columns(row_data, row, table_name, extschema, False)
 
-    categories = ops.utils.get_dynamic_categories(row, table, extschema, idl)
+    categories = ops.utils.get_dynamic_categories(row, table_name, extschema, idl)
 
     # set up this row's children
     for key in table_schema.children:
@@ -272,7 +272,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None):
 
                             if index not in new_data:
                                 # delete row check
-                                if ops.utils.delete_row_check(item, child_table_name, extschema, idl)
+                                if ops.utils.delete_row_check(item, child_table_name, extschema, idl):
                                     delete_list.append(item)
 
                         # delete rows

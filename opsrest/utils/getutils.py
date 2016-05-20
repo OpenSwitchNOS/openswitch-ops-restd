@@ -426,11 +426,11 @@ def process_sort_value(item, key, categorized):
     if value is not None:
         if isinstance(value, str):
             value = value.lower()
-        else:
-            # We might in the future need to change this to
-            # process the value's type accordingly, but sort
-            # is currently done ascii-wise so this should be ok.
-            value = ""
+    else:
+        # We might in the future need to change this to
+        # process the value's type accordingly, but sort
+        # is currently done ascii-wise so this should be ok.
+        value = ""
     return value
 
 

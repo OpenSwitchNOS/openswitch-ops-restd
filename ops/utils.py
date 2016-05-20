@@ -188,14 +188,14 @@ def set_config_columns(data, row, table, extschema, new=False):
         if not new and not table_schema.config[key].mutable:
             continue
 
-        if key not in row_data:
+        if key not in data:
             if new or row.__getattr__(key) is None:
                 continue
             else:
                 value =  ops.utils.get_empty_by_basic_type(row.__getattr__(key))
                 row.__setattr__(key, value)
         else:
-            value = row_data[key]
+            value = data[key]
             row.__setattr__(key, value)
 
     if new:
@@ -203,8 +203,8 @@ def set_config_columns(data, row, table, extschema, new=False):
             if key is 'uuid':
                 continue
 
-            if key not in table_schema.config.keys() and key in row_data:
-                row.__setattr__(key, row_data[key])
+            if key not in table_schema.config.keys() and key in data:
+                row.__setattr__(key, data[key])
 
     return True
 
@@ -258,10 +258,9 @@ def config_child_column(column, table, extschema, categories):
         if categories[ops.constants.OVSDB_SCHEMA_REFERENCE][key].category !=\
                 ops.constants.OVSDB_SCHEMA_CONFIG:
                     config = False
-    elif ops.utils.is_immutable_table(child_table_name, extschema):
+    elif ops.utils.is_immutable_table(child_table, extschema):
         config = False
-    elif new or row.__getattr__(key) is None:
-        config = False
+
     return config
 
 def is_immutable_table(table, extschema):
