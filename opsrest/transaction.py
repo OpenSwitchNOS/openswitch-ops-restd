@@ -43,7 +43,7 @@ class OvsdbTransaction:
             self.txn.abort()
 
     def get_error(self):
-        return json.loads(self.txn.get_error())
+        return self.txn.get_error()
 
 
 class OvsdbTransactionResult:
