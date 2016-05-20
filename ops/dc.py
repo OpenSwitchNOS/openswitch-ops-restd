@@ -37,11 +37,10 @@ def register(extschema, ovsschema, ovsremote):
 
         register_columns = []
 
-        # configuration columns
+       # configuration columns
         config_columns = [str(key) for key in tableschema.config.keys()]
         # reference columns
         reference_columns = [str(key) for key in tableschema.references.keys()]
-
 
         # index columns
         for item in tableschema.index_columns:
@@ -50,6 +49,12 @@ def register(extschema, ovsschema, ovsremote):
 
         register_columns += config_columns
         register_columns += reference_columns
+
+        # dynamic columns
+        if tableschema.dynamic:
+            for key in tableschema.dynamic.keys():
+                if key not in register_columns:
+                    register_columns.append(key)
 
         schema_helper.register_columns(str(tablename), register_columns)
 
