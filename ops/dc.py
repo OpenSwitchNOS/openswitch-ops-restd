@@ -17,6 +17,10 @@ import ops.constants, ops.opsidl
 
 from ovs.db.idl import SchemaHelper, Idl, Transaction
 
+import ovs.vlog
+vlog = ovs.vlog.Vlog('dc')
+
+
 def register(extschema, ovsschema, ovsremote):
     """Register interest in all configuration and index
     columns for all tables in ovsschema.
@@ -37,11 +41,10 @@ def register(extschema, ovsschema, ovsremote):
 
         register_columns = []
 
-        # configuration columns
+       # configuration columns
         config_columns = [str(key) for key in tableschema.config.keys()]
         # reference columns
         reference_columns = [str(key) for key in tableschema.references.keys()]
-
 
         # index columns
         for item in tableschema.index_columns:
@@ -50,6 +53,17 @@ def register(extschema, ovsschema, ovsremote):
 
         register_columns += config_columns
         register_columns += reference_columns
+
+        # dynamic columns
+        if tableschema.dynamic:
+            for key in tableschema.dynamic.keys():
+                if key not in register_columns:
+                    register_columns.append(key)
+
+        # NOTE: remove this when we have a proper
+        # solution for TG-1116
+        if str(tablename) == 'VLAN':
+            register_columns.append('internal_usage')
 
         schema_helper.register_columns(str(tablename), register_columns)
 
@@ -72,22 +86,26 @@ def read(extschema, idl):
             to the relationship between various tables as
             described in vswitch.extschema
     """
-
     config = {}
     for table_name in extschema.ovs_tables.keys():
 
-    # Check only root table or top level table
+        # Check only root table or top level table
         if extschema.ovs_tables[table_name].parent is not None:
             continue
 
-    # Get table data for root or top level table
-        table_data = _read.get_table_data(table_name, extschema, idl)
+        # Get table data for root or top level table
+        try:
+            table_data = _read.get_table_data(table_name, extschema, idl)
+        except Exception as e:
+            vlog.err(e)
+            return e
 
         if table_data is not None:
             config.update(table_data)
 
     # remove system uuid
     config[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE] = config[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE].values()[0]
+    vlog.dbg('succcess generating running configuration')
     return config
 
 def write(data, extschema, idl, txn=None, block=False):
@@ -111,6 +129,7 @@ def write(data, extschema, idl, txn=None, block=False):
             txn = Transaction(idl)
             block = True
         except AssertionError as e:
+            vlog.dbg('error in creating transaction: %s' % e)
             return e
 
     # dc.read returns config db with 'System' table
@@ -118,30 +137,43 @@ def write(data, extschema, idl, txn=None, block=False):
     # current database's System row UUID so that all
     # tables in 'data' are represented the same way
 
-    system_uuid = idl.tables[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE].rows.keys()[0]
-    data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE] = {system_uuid:data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE]}
+    try:
+        system_uuid = idl.tables[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE].rows.keys()[0]
+        data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE] = {system_uuid:data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE]}
 
-    # iterate over all top-level tables i.e. root
-    for table_name, tableschema in extschema.ovs_tables.iteritems():
+        _write.setup_validators(extschema, idl)
 
-        # iterate over non-children tables
-        if extschema.ovs_tables[table_name].parent is not None:
-            continue
+        # iterate over all top-level tables i.e. root
+        for table_name, tableschema in extschema.ovs_tables.iteritems():
 
-        # set up the non-child table
-        _write.setup_table(table_name, data, extschema, idl, txn)
+            # iterate over non-children tables
+            if extschema.ovs_tables[table_name].parent is not None:
+                continue
 
-    # iterate over all tables to fill in references
-    for table_name, tableschema in extschema.ovs_tables.iteritems():
+            # set up the non-child table
+            _write.setup_table(table_name, data, extschema, idl, txn)
 
-        if extschema.ovs_tables[table_name].parent is not None:
-            continue
+        validation_errors = _write.exec_validators()
 
-        _write.setup_references(table_name, data, extschema, idl)
+        # iterate over all tables to fill in references
+        for table_name, tableschema in extschema.ovs_tables.iteritems():
 
-    if not block:
-        # txn maybe be incomplete
-        return txn.commit()
-    else:
-        # txn is completed but will block until it is done
-        return txn.commit_block()
+            if extschema.ovs_tables[table_name].parent is not None:
+                continue
+
+            _write.setup_references(table_name, data, extschema, idl)
+    except Exception as e:
+        return e
+
+    try:
+        if not block:
+            # txn maybe be incomplete
+            result = txn.commit()
+        else:
+            # txn is completed but will block until it is done
+            result = txn.commit_block()
+        vlog.dbg('transacton result: %s' % result)
+        return result
+    except Exception as e:
+        vlog.err('transaction exception: %s' % e)
+        return e
