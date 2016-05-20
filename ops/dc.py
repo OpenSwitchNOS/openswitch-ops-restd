@@ -37,11 +37,10 @@ def register(extschema, ovsschema, ovsremote):
 
         register_columns = []
 
-        # configuration columns
+       # configuration columns
         config_columns = [str(key) for key in tableschema.config.keys()]
         # reference columns
         reference_columns = [str(key) for key in tableschema.references.keys()]
-
 
         # index columns
         for item in tableschema.index_columns:
@@ -50,6 +49,12 @@ def register(extschema, ovsschema, ovsremote):
 
         register_columns += config_columns
         register_columns += reference_columns
+
+        # dynamic columns
+        if tableschema.dynamic:
+            for key in tableschema.dynamic.keys():
+                if key not in register_columns:
+                    register_columns.append(key)
 
         schema_helper.register_columns(str(tablename), register_columns)
 
@@ -76,12 +81,15 @@ def read(extschema, idl):
     config = {}
     for table_name in extschema.ovs_tables.keys():
 
-    # Check only root table or top level table
+        # Check only root table or top level table
         if extschema.ovs_tables[table_name].parent is not None:
             continue
 
-    # Get table data for root or top level table
-        table_data = _read.get_table_data(table_name, extschema, idl)
+        # Get table data for root or top level table
+        try:
+            table_data = _read.get_table_data(table_name, extschema, idl)
+        except Exception as e:
+            return e
 
         if table_data is not None:
             config.update(table_data)
@@ -121,27 +129,33 @@ def write(data, extschema, idl, txn=None, block=False):
     system_uuid = idl.tables[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE].rows.keys()[0]
     data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE] = {system_uuid:data[ops.constants.OVSDB_SCHEMA_SYSTEM_TABLE]}
 
-    # iterate over all top-level tables i.e. root
-    for table_name, tableschema in extschema.ovs_tables.iteritems():
+    try:
+        # iterate over all top-level tables i.e. root
+        for table_name, tableschema in extschema.ovs_tables.iteritems():
 
-        # iterate over non-children tables
-        if extschema.ovs_tables[table_name].parent is not None:
-            continue
+            # iterate over non-children tables
+            if extschema.ovs_tables[table_name].parent is not None:
+                continue
 
-        # set up the non-child table
-        _write.setup_table(table_name, data, extschema, idl, txn)
+            # set up the non-child table
+            _write.setup_table(table_name, data, extschema, idl, txn)
 
-    # iterate over all tables to fill in references
-    for table_name, tableschema in extschema.ovs_tables.iteritems():
+        # iterate over all tables to fill in references
+        for table_name, tableschema in extschema.ovs_tables.iteritems():
 
-        if extschema.ovs_tables[table_name].parent is not None:
-            continue
+            if extschema.ovs_tables[table_name].parent is not None:
+                continue
 
-        _write.setup_references(table_name, data, extschema, idl)
+            _write.setup_references(table_name, data, extschema, idl)
+    except Exception as e:
+        return e
 
-    if not block:
-        # txn maybe be incomplete
-        return txn.commit()
-    else:
-        # txn is completed but will block until it is done
-        return txn.commit_block()
+    try:
+        if not block:
+            # txn maybe be incomplete
+            return txn.commit()
+        else:
+            # txn is completed but will block until it is done
+            return txn.commit_block()
+    except Exception as e:
+        return e
