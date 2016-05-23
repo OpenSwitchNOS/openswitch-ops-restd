@@ -17,6 +17,8 @@ import os
 import json
 import imp
 import sys
+import subprocess
+import time
 
 try:
     imp.find_module('websocket')
@@ -25,8 +27,11 @@ except ImportError:
     print "Please install websocket-client first."
     exit()
 
+SSL_CERT_TMP = '/tmp/server.crt'
+
 # Command line args
 IP_ADDR_OPT = '-i'
+DOCKER_CONTAINER_OPT = '-d'
 
 
 def main():
@@ -36,7 +41,8 @@ def main():
     if IP_ADDR_OPT not in cmd_args:
         handle_usage_error("IP address not defined.")
 
-    connect_to_server(cmd_args[IP_ADDR_OPT], get_ssl_opts())
+    connect_to_server(cmd_args[IP_ADDR_OPT],
+                      get_ssl_opts(cmd_args[DOCKER_CONTAINER_OPT]))
 
 
 def get_cmd_args(cmd_args):
@@ -46,29 +52,33 @@ def get_cmd_args(cmd_args):
     # Get the arguments list
     cmdargs = sys.argv
 
-    if (total_args < 3) or (total_args % 2 != 1):
+    if (total_args < 5) or (total_args % 2 != 1):
         handle_usage_error("Invalid number of args.")
 
     for index, arg in enumerate(cmdargs):
-        print arg
         if arg == IP_ADDR_OPT:
             cmd_args[IP_ADDR_OPT] = cmdargs[index + 1]
+        elif arg == DOCKER_CONTAINER_OPT:
+            cmd_args[DOCKER_CONTAINER_OPT] = cmdargs[index + 1]
 
 
-def get_ssl_opts():
-    src_path = os.path.dirname(os.path.realpath(__file__))
-    src_file = os.path.join(src_path, 'server.crt')
+def get_ssl_opts(docker_container):
+    get_server_crt(docker_container)
 
     sslopt = {"cert_reqs": ssl.CERT_REQUIRED,
-              "ca_certs": src_file,
-              "ssl_version": ssl.PROTOCOL_SSLv23}
+              "ca_certs": SSL_CERT_TMP,
+              "ssl_version": ssl.PROTOCOL_SSLv23,
+              "check_hostname": False}
 
     return sslopt
 
 
 def connect_to_server(ip_address, sslopt):
+    print "Connecting to %s" % ip_address
+
     ws = websocket.WebSocket(sslopt=sslopt)
     ws.connect("wss://%s/rest/v1/ws/notifications" % ip_address)
+    print "Successfully connected."
 
     while True:
         parsed = json.loads(ws.recv())
@@ -82,7 +92,29 @@ def handle_usage_error(error):
 
 
 def print_usage():
-    print "Usage: python wsclient.py -i WS_SERVER_IP_ADDRESS"
+    print("Usage: python wsclient.py -i WS_SERVER_IP_ADDRESS "
+          "-d DOCKER_CONTAINER_ID")
+
+
+def get_server_crt(docker_container):
+    print "Getting SSL cert from server container %s" % docker_container
+
+    try:
+        res = subprocess.check_output(['docker', 'cp', docker_container + \
+                                       ':/etc/ssl/certs/server.crt', \
+                                       SSL_CERT_TMP])
+        time.sleep(1)
+    except subprocess.CalledProcessError as e:
+        handle_usage_error("Error in subprocess docker cp command")
+
+    print "Received SSL cert from server"
+
+
+def remove_server_crt():
+    if os.path.exists(SSL_CERT_TMP):
+        print "Removing the SSL cert"
+        os.remove(SSL_CERT_TMP)
+        print "SSL cert successfuly removed"
 
 
 if __name__ == "__main__":
