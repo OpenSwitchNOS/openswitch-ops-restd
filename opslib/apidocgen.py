@@ -1374,6 +1374,38 @@ def genUserLogin(paths):
 
     paths[path] = ops
 
+def genUserLogout(paths):
+    path = "/logout"
+
+    ops = {}
+    op = {}
+    op["summary"] = "User logout"
+    op["description"] = "Log user out of the system"
+    op["tags"] = ["User"]
+
+    params = []
+
+    op["parameters"] = params
+
+    responses = {}
+    response = {}
+    response["description"] = "User logged out successfully, cookie removed"
+    responses["200"] = response
+
+    response = {}
+    response["description"] = "Bad request"
+    response["schema"] = {'$ref': "#/definitions/Error"}
+    responses["400"] = response
+
+    response = {}
+    response["description"] = "User not authenticated"
+    responses["401"] = response
+
+    op["responses"] = responses
+
+    ops["post"] = op
+
+    paths[path] = ops
 
 def genLogsAPI(paths, definitions):
     path = "/logs"
@@ -1605,6 +1637,9 @@ def getFullAPI(schema):
 
     # Creating the login URL
     genUserLogin(paths)
+
+    # Creating the logout URL
+    genUserLogout(paths)
 
     # Creating the logs URL
     genLogsAPI(paths, definitions)
