@@ -976,3 +976,61 @@ def get_parent_child_col_and_relation(schema, parent_table, child_table):
                 return (column, OVSDB_SCHEMA_BACK_REFERENCE)
 
     return (None, None)
+
+
+def get_all_columns(table_schema):
+    # Configuration columns
+    config_columns = [str(key) for key in table_schema.config.keys()]
+
+    # Reference columns
+    reference_columns = [str(key) for key in table_schema.references.keys()]
+
+    # Status columns
+    status_columns = [str(key) for key in table_schema.status.keys()]
+
+    # Statistics
+    stats_columns = [str(key) for key in table_schema.stats.keys()]
+
+    # Consolidate all keys into one dictionary
+    all_columns = (config_columns + reference_columns +
+                   status_columns + stats_columns)
+
+    return all_columns
+
+
+def get_readonly_columns(table_schema):
+    # Status columns
+    status_columns = [str(key) for key in table_schema.status.keys()]
+
+    # Statistics
+    stats_columns = [str(key) for key in table_schema.stats.keys()]
+
+    # Status and statistics will be read-only.
+    read_only_columns = status_columns + stats_columns
+
+    # Indexes may be stats/status, so we need to remove it from the
+    # readonly list if it exists.
+    for item in table_schema.index_columns:
+        if item in read_only_columns:
+            read_only_columns.remove(item)
+
+    return read_only_columns
+
+
+def fetch_readonly_columns(schema, table, idl, rows):
+    """
+    Fetches the columns that were registered as read-only from the DB.
+    The method utilizes commit_block. Top-level caller should invoke this
+    in a coroutine.
+    """
+    app_log.debug("Fetching read-only columns..")
+    table_schema = schema.ovs_tables[table]
+    readonly_columns = get_readonly_columns(table_schema)
+    txn = ovs.db.idl.Transaction(idl)
+
+    for column in readonly_columns:
+        for row in rows:
+            row.fetch(column)
+
+    status = txn.commit_block()
+    app_log.debug("Fetching status: %s" % status)
