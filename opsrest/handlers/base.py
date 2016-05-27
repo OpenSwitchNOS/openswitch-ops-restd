@@ -146,9 +146,10 @@ class BaseHandler(web.RequestHandler):
             if isinstance(self, OVSDBAPIHandler):
                 app_log.debug("If-Match is for OVSDBAPIHandler")
                 from opsrest import get
-                result = get.get_resource(self.idl, self.resource_path,
-                                          self.schema, self.request.path,
-                                          selector, query_arguments)
+                result = yield get.get_resource(self.idl, self.resource_path,
+                                                self.schema, self.request.path,
+                                                selector, query_arguments,
+                                                fetch_readonly=True)
             elif self.controller is not None:
                 app_log.debug("If-Match is for custom resource")
 
