@@ -976,3 +976,21 @@ def get_parent_child_col_and_relation(schema, parent_table, child_table):
                 return (column, OVSDB_SCHEMA_BACK_REFERENCE)
 
     return (None, None)
+
+
+def fetch_readonly_columns(schema, table, idl, rows):
+    """
+    Fetches the columns that were registered as read-only from the DB.
+    The method utilizes commit_block. Top-level caller should invoke this
+    in a coroutine.
+    """
+    app_log.debug("Fetching read-only columns..")
+    table_schema = schema.ovs_tables[table]
+    txn = ovs.db.idl.Transaction(idl)
+
+    for column in table_schema.readonly_columns:
+        for row in rows:
+            row.fetch(column)
+
+    status = txn.commit_block()
+    app_log.debug("Fetching status: %s" % status)
