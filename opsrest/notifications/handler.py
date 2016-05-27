@@ -66,6 +66,7 @@ class NotificationHandler():
         # self._notification_monitor = \
         #    OvsdbNotificationMonitor(manager.remote,
         #                             manager.schema,
+        #                             self._schema,
         #                             self.subscribed_changes_callback)
 
         # TODO: Remove this code when second monitor is enabled
