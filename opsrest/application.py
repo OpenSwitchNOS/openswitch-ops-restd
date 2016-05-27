@@ -26,10 +26,11 @@ class OvsdbApiApplication(Application):
     def __init__(self, settings):
         self.settings = settings
         self.settings['cookie_secret'] = cookiesecret.generate_cookie_secret()
-        self.manager = OvsdbConnectionManager(self.settings.get('ovs_remote'),
-                                              self.settings.get('ovs_schema'))
         schema = self.settings.get('ext_schema')
         self.restschema = restparser.parseSchema(schema)
+        self.manager = OvsdbConnectionManager(self.settings.get('ovs_remote'),
+                                              self.settings.get('ovs_schema'),
+                                              self.restschema)
         self._url_patterns = self._get_url_patterns()
         Application.__init__(self, self._url_patterns, **self.settings)
 

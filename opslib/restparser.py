@@ -309,8 +309,11 @@ class OVSTable(object):
 
         self.is_root = is_root
 
-        # list of all column names
+        # List of all column names
         self.columns = []
+
+        # List of read-only column names
+        self.readonly_columns = []
 
         # Is the table in plural form?
         self.is_many = is_many
@@ -389,13 +392,15 @@ class OVSTable(object):
                                                              unicode]))
             parser.finish()
 
+            is_readonly_column = False
             is_optional = False
             if isinstance(column_json['type'], dict):
                 if ('min' in column_json['type'] and
                         column_json['type']['min'] == 0):
                     is_optional = True
 
-            table.columns.append(column_name)
+            table.columns.append(str(column_name))
+
             # An attribute will be able to get marked with relationship
             # and category tags simultaneously. We are utilizing the
             # new form of tagging as a second step.
@@ -423,16 +428,24 @@ class OVSTable(object):
                                                       type_, is_optional,
                                                       mutable, category)
             elif category == "status":
+                is_readonly_column = True
                 table.status[column_name] = OVSColumn(table, column_name,
                                                       type_, is_optional,
                                                       True, category)
             elif category == "statistics":
+                is_readonly_column = True
                 table.stats[column_name] = OVSColumn(table, column_name,
                                                      type_, is_optional,
                                                      True, category)
+
             # Add to the array the name of the dynamic column
             if category.dynamic:
                 table.dynamic[column_name] = category
+
+            # If the column is readonly, check if it is an index. Indexes
+            # should not be registered as readonly columns.
+            if is_readonly_column and column_name not in table.index_columns:
+                table.readonly_columns.append(str(column_name))
 
         # Validate dynamic categories consistency
         for column_name, category in table.dynamic.iteritems():
