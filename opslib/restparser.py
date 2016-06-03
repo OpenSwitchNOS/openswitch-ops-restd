@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (C) 2015 Hewlett-Packard Enterprise Development Company, L.P.
+# Copyright (C) 2015-2016 Hewlett-Packard Enterprise Development Company, L.P.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,7 +14,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import argparse
 import getopt
 import json
 import sys
@@ -41,8 +40,16 @@ xml_tree = None
 OVSDB_SCHEMA_CONFIG = 'configuration'
 OVSDB_SCHEMA_STATS = 'statistics'
 OVSDB_SCHEMA_STATUS = 'status'
+OVSDB_SCHEMA_REFERENCE = 'reference'
 OVSDB_CATEGORY_PERVALUE = 'per-value'
 OVSDB_CATEGORY_FOLLOWS = 'follows'
+
+# Relationship type map
+RELATIONSHIP_MAP = {
+    '1:m': 'child',
+    'm:1': 'parent',
+    'reference': 'reference'
+}
 
 
 # Convert name into all lower case and into plural (default) or singular format
@@ -74,41 +81,58 @@ def extractColDesc(column_desc):
 
 
 class OVSColumn(object):
-    """__init__() functions as the class constructor"""
-    def __init__(self, table, col_name, type_, is_optional=True,
-                 mutable=True, category=None):
-        self.name = col_name
+    '''
+    An instance of OVSColumn represents a column
+    from the OpenSwitch Extended Schema. Attributes:
 
-        # category type of this column
+    - name: the column's name
+    - category: the column's category
+    - is_optional: whether the column is required to have a value
+    - mutable: whether the column is modifiable after creation
+    - enum: possible values for the column or column's keys
+    - type: the column's (or key's) base type
+    - rangeMin: the column's (or key's) data range
+    - rangeMax: the column's (or key's) data range
+    - value_type: if a map, the value's base type
+    - valueRangeMin: if a map, the value's data range
+    - valueRangeMax: if a map, the value's data range
+    - is_dict: whether the column is a map/dictionary
+    - is_list: whether the column is a list
+    - n_min: the column's minimum number of elements
+    - n_max: the column's maximum number of elements
+    - kvs: if a map, this holds each key's value type information
+    - keyname: name used to identify the reference (if a kv reference)
+    - desc: the column's documentation/description text
+    '''
+    def __init__(self, table_name, column_name, ovs_base_type,
+                 is_optional=True, mutable=True, category=None):
+
+        key_type = ovs_base_type.key
+        value_type = ovs_base_type.value
+
+        self.name = column_name
         self.category = category
-
-        # is this column entry optional
         self.is_optional = is_optional
-
-        # is this column modifiable after creation
         self.mutable = mutable
+        self.enum = key_type.enum
 
-        base_key = type_.key
-        base_value = type_.value
+        # Process the column's (or key's) base type
+        self.type, self.rangeMin, self.rangeMax = self.process_type(key_type)
 
-        # Possible values for keys only
-        self.enum = base_key.enum
-
-        self.type, self.rangeMin, self.rangeMax = self.process_type(base_key)
-
+        # If a map, process the value's base type
         self.value_type = None
-        if base_value is not None:
+        if value_type is not None:
             self.value_type, self.valueRangeMin, self.valueRangeMax = \
-                self.process_type(base_value)
+                self.process_type(value_type)
 
-        # The number of instances
+        # Information regarding the column's nature and number of elements
         self.is_dict = self.value_type is not None
-        self.is_list = (not self.is_dict) and type_.n_max > 1
-        self.n_max = type_.n_max
-        self.n_min = type_.n_min
+        self.is_list = (not self.is_dict) and ovs_base_type.n_max > 1
+        self.n_max = ovs_base_type.n_max
+        self.n_min = ovs_base_type.n_min
 
         self.kvs = {}
-        self.desc = self.parse_xml_desc(table.name, col_name, self.kvs)
+        self.desc = self.parse_xml_desc(table_name, column_name, self.kvs)
 
     # Read the description for each column from XML source
     def parse_xml_rec(self, node, xmlColumn, kvs):
@@ -168,11 +192,11 @@ class OVSColumn(object):
             return extractColDesc(columnDesc)
 
     def process_type(self, base):
-        type = base.type
+        __type = base.type
         rangeMin = None
         rangeMax = None
 
-        if type == types.StringType:
+        if __type == types.StringType:
 
             if base.min_length is None:
                 rangeMin = 0
@@ -184,11 +208,11 @@ class OVSColumn(object):
             else:
                 rangeMax = base.max_length
 
-        elif type == types.UuidType:
+        elif __type == types.UuidType:
             rangeMin = None
             rangeMax = None
 
-        elif type != types.BooleanType:
+        elif __type != types.BooleanType:
 
             if base.min is None:
                 rangeMin = 0
@@ -200,45 +224,52 @@ class OVSColumn(object):
             else:
                 rangeMax = base.max
 
-        return (type, rangeMin, rangeMax)
+        return (__type, rangeMin, rangeMax)
 
 
-class OVSReference(object):
-    """__init__() functions as the class constructor"""
-    def __init__(self, type_, relation='reference', mutable=True,
-                 category=None):
-        base_type = type_.key
-        self.mutable = mutable
+class OVSReference(OVSColumn):
+    '''
+    An instance of OVSReference represents a column from the OpenSwitch
+    Extended Schema that contains references to other tables. Attributes not
+    inherited from OVSColumn:
 
-        # category type of this reference
-        self.category = category
+    - kv_type: whether this is a kv reference
+    - kv_key_type: if a kv reference, the type of the key
+    - ref_table: the table to reference
+    - relation: relationship type between this column and the referenced table
+    - is_plural: whether the column is plural
+    '''
+    def __init__(self, table_name, column_name, ovs_base_type,
+                 is_optional=True, mutable=True, category=None,
+                 relation=OVSDB_SCHEMA_REFERENCE):
 
-        # Name of the table being referenced
+        super(OVSReference, self).__init__(table_name, column_name,
+                                           ovs_base_type, is_optional, mutable,
+                                           category)
+
+        key_type = ovs_base_type.key
+
+        # Information of the table being referenced
         self.kv_type = False
-        if base_type.type != types.UuidType:
+        if key_type.type != types.UuidType:
             # referenced table name must be in value part of KV pair
             self.kv_type = True
-            self.kv_key_type = base_type.type
-            base_type = type_.value
-        self.ref_table = base_type.ref_table_name
+            self.kv_key_type = key_type.type
+            key_type = ovs_base_type.value
+        self.ref_table = key_type.ref_table_name
+
+        # Overwrite parsed type from parent class processing
+        self.type = key_type
 
         # Relationship of the referenced to the current table
         # one of child, parent or reference
-        if relation == "child":
-            self.relation = "child"
-        elif relation == "parent":
-            self.relation = "parent"
-        elif relation == "reference":
-            self.relation = "reference"
-        else:
+        if relation not in RELATIONSHIP_MAP.values():
             raise error.Error("unknown table relationship %s" % relation)
+        else:
+            self.relation = relation
 
         # The number of instances
-        self.is_plural = (type_.n_max != 1)
-        self.n_max = type_.n_max
-        self.n_min = type_.n_min
-
-        self.type = base_type.type
+        self.is_plural = (self.n_max != 1)
 
 
 class OVSColumnCategory(object):
@@ -396,40 +427,47 @@ class OVSTable(object):
                     is_optional = True
 
             table.columns.append(column_name)
+
             # An attribute will be able to get marked with relationship
             # and category tags simultaneously. We are utilizing the
             # new form of tagging as a second step.
             # For now, we are using only one tag.
-            if relationship == "1:m":
-                table.references[column_name] = OVSReference(type_, "child",
-                                                             mutable, category)
-                table.references[column_name].column = OVSColumn(table,
-                                                                 column_name,
-                                                                 type_,
-                                                                 True,
-                                                                 mutable,
-                                                                 category)
-            elif relationship == "m:1":
-                table.references[column_name] = OVSReference(type_, "parent",
-                                                             mutable, category)
-            elif relationship == "reference":
-                _mutable = mutable if category == 'configuration' else False
-                table.references[column_name] = OVSReference(type_,
-                                                             "reference",
+
+            _mutable = mutable
+            if relationship is not None:
+
+                # A non-configuration OVSDB_SCHEMA_REFERENCE is never mutable,
+                # otherwise the parsed mutable flag is used
+                if relationship == OVSDB_SCHEMA_REFERENCE and \
+                        category != OVSDB_SCHEMA_CONFIG:
+                    _mutable = False
+
+                _relationship = RELATIONSHIP_MAP[relationship]
+
+                table.references[column_name] = OVSReference(table.name,
+                                                             column_name,
+                                                             type_,
+                                                             is_optional,
                                                              _mutable,
-                                                             category)
-            elif category == "configuration":
-                table.config[column_name] = OVSColumn(table, column_name,
-                                                      type_, is_optional,
-                                                      mutable, category)
-            elif category == "status":
-                table.status[column_name] = OVSColumn(table, column_name,
-                                                      type_, is_optional,
-                                                      True, category)
-            elif category == "statistics":
-                table.stats[column_name] = OVSColumn(table, column_name,
-                                                     type_, is_optional,
-                                                     True, category)
+                                                             category,
+                                                             _relationship)
+            else:
+
+                # Status and statistics columns are always mutable
+                if category != OVSDB_SCHEMA_CONFIG:
+                    _mutable = True
+
+                ovs_column = OVSColumn(table.name, column_name, type_,
+                                       is_optional, _mutable, category)
+
+                # Save the column in its category group
+                if category == OVSDB_SCHEMA_CONFIG:
+                    table.config[column_name] = ovs_column
+                elif category == OVSDB_SCHEMA_STATUS:
+                    table.status[column_name] = ovs_column
+                elif category == OVSDB_SCHEMA_STATS:
+                    table.stats[column_name] = ovs_column
+
             # Add to the array the name of the dynamic column
             if category.dynamic:
                 table.dynamic[column_name] = category
@@ -541,7 +579,7 @@ def is_immutable(table, schema):
     if table_schema.is_root:
         # CASE 1: if there are no indices, a root table is considered
         #         IMMUTABLE for REST API
-        # CASE 2: if there is at least one index of category 'configuration',
+        # CASE 2: if there is at least one index of category OVSDB_SCHEMA_CONFIG,
         #         a root table is considered MUTABLE for REST API
 
         # NOTE: an immutable table can still be modified by other daemons
@@ -556,7 +594,7 @@ def is_immutable(table, schema):
             return not _has_config_index(table, schema)
         else:
             # child e.g. Bridge
-            # check if the reference in 'parent' is of category 'configuration'
+            # check if the reference in 'parent' is of category OVSDB_SCHEMA_CONFIG
             parent = table_schema.parent
             parent_schema = schema.ovs_tables[parent]
             children = parent_schema.children
@@ -573,7 +611,7 @@ def is_immutable(table, schema):
                         ref = item
                         break
 
-                if parent_schema.references[ref].category == 'configuration':
+                if parent_schema.references[ref].category == OVSDB_SCHEMA_CONFIG:
                     return False
 
             else:
@@ -593,7 +631,7 @@ def _has_config_index(table, schema):
             return True
         elif index in schema.ovs_tables[table].references:
             if schema.ovs_tables[table].references[index].category == \
-                    'configuration':
+                    OVSDB_SCHEMA_CONFIG:
                 return True
 
     # no indices or no index columns with category configuration
@@ -636,7 +674,7 @@ The following options are also available:
   --title=TITLE               use TITLE as title instead of schema name
   --version=VERSION           use VERSION to display on document footer
   -h, --help                  display this help message\
-""" % {'argv0': argv0}
+""" % {'argv0': sys.argv[0]}
     sys.exit(0)
 
 
