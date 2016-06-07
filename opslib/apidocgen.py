@@ -14,28 +14,16 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import argparse
+import copy
 import getopt
 import json
-import sys
-import re
-import string
-import copy
 import os
+import sys
 
-import xml.etree.ElementTree as ET
-
-import ovs.dirs
 from ovs.db import error
 from ovs.db import types
-import ovs.util
-import ovs.daemon
-import ovs.db.idl
 
-from restparser import OVSColumn
 from restparser import OVSReference
-from restparser import OVSTable
-from restparser import RESTSchema
 from restparser import normalizeName
 from restparser import parseSchema
 
@@ -603,6 +591,7 @@ def genDefinition(table_name, col, definitions):
             else:
                 max = col.rangeMax
             if 'desc' in detail.keys():
+                # TODO strip detail['desc'] from markdown tags
                 desc = detail['desc']
             else:
                 desc = ""
@@ -628,9 +617,11 @@ def genDefinition(table_name, col, definitions):
         sub["description"] = "Key-Value pairs for " + col.name
         return sub
     elif col.is_list:
+        # TODO strip col.desc from markdown tags
         return genBaseTypeList(col.type, col.desc)
     else:
         # simple attributes
+        # TODO strip col.desc from markdown tags
         return genBaseType(col.type, col.rangeMin, col.rangeMax, col.desc)
 
 
@@ -1645,7 +1636,7 @@ def getFullAPI(schema):
     return api
 
 
-def docGen(schemaFile, xmlFile, title=None, version=None):
+def docGen(schemaFile, title=None, version=None):
     schema = parseSchema(schemaFile)
 
     # Special treat System table as /system resource
@@ -1659,18 +1650,16 @@ def docGen(schemaFile, xmlFile, title=None, version=None):
 def usage():
     print """\
 %(argv0)s: REST API documentation generator
-Parse the meta schema file based on OVSDB schema together with its
-accompanying XML documentation file to generate REST API YAML file
-for rendering through swagger.
-usage: %(argv0)s [OPTIONS] SCHEMA XML
+Parse the meta schema file based on OVSDB schema to
+generate REST API YAML file for rendering through swagger.
+usage: %(argv0)s [OPTIONS] SCHEMA
 where SCHEMA is an extended OVSDB schema in JSON format
-  and XML is its accompanying documentation in XML format.
 
 The following options are also available:
   --title=TITLE               use TITLE as title instead of schema name
   --version=VERSION           use VERSION to override
   -h, --help                  display this help message\
-""" % {'argv0': argv0}
+""" % {'argv0': sys.argv[0]}
     sys.exit(0)
 
 
@@ -1680,7 +1669,7 @@ if __name__ == "__main__":
             options, args = getopt.gnu_getopt(sys.argv[1:], 'h',
                                               ['title=', 'version=', 'help'])
         except getopt.GetoptError, geo:
-            sys.stderr.write("%s: %s\n" % (argv0, geo.msg))
+            sys.stderr.write("%s: %s\n" % (sys.argv[0], geo.msg))
             sys.exit(1)
 
         title = None
@@ -1695,12 +1684,12 @@ if __name__ == "__main__":
             else:
                 sys.exit(0)
 
-        if len(args) != 2:
-            sys.stderr.write("Exactly 2 non-option arguments required "
+        if len(args) != 1:
+            sys.stderr.write("Exactly 1 non-option arguments required "
                              "(use --help for help)\n")
             sys.exit(1)
 
-        s = docGen(args[0], args[1], title, version)
+        s = docGen(args[0], title, version)
         print s
 
     except error.Error, e:

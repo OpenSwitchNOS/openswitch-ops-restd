@@ -15,26 +15,24 @@
 #    under the License.
 
 import getopt
-import json
-import sys
 import re
 import string
+import sys
 
 import inflect
-import xml.etree.ElementTree as ET
 
-import ovs.dirs
-from ovs.db import error
-from ovs.db import types
-import ovs.util
 import ovs.daemon
+from ovs.db import error, types
 import ovs.db.idl
+import ovs.dirs
+import ovs.util
 
 
 # Global variables
 inflect_engine = inflect.engine()
 
-xml_tree = None
+# Whether to load the documentation strings in the resulting schema object
+load_doc = True
 
 # Schema constants
 OVSDB_SCHEMA_CONFIG = 'configuration'
@@ -66,20 +64,6 @@ def normalizeName(name, to_plural=True):
     return(string.join(words, '_'))
 
 
-def extractColDesc(column_desc):
-    if column_desc is None:
-        column_desc = ""
-    # Remove unecessary tags at the beginning of each description
-    if column_desc != "":
-        column_desc = " ".join(column_desc.split())
-    reg = '<column .*?>(.*)</column>'
-    r = re.search(reg, column_desc)
-    if r is None:
-        return ""
-    else:
-        return str(r.group(1)).lstrip().rstrip()
-
-
 class OVSColumn(object):
     '''
     An instance of OVSColumn represents a column
@@ -103,9 +87,12 @@ class OVSColumn(object):
     - kvs: if a map, this holds each key's value type information
     - keyname: name used to identify the reference (if a kv reference)
     - desc: the column's documentation/description text
+    - emptyValue: value assumed for the column, if is_optional=True and empty
     '''
     def __init__(self, table_name, column_name, ovs_base_type,
-                 is_optional=True, mutable=True, category=None):
+                 is_optional=True, mutable=True, category=None,
+                 emptyValue=None, valueMap=None, keyname=None,
+                 col_doc=None, group=None):
 
         key_type = ovs_base_type.key
         value_type = ovs_base_type.value
@@ -113,8 +100,10 @@ class OVSColumn(object):
         self.name = column_name
         self.category = category
         self.is_optional = is_optional
+        self.emptyValue = emptyValue
         self.mutable = mutable
         self.enum = key_type.enum
+        self.keyname = keyname
 
         # Process the column's (or key's) base type
         self.type, self.rangeMin, self.rangeMax = self.process_type(key_type)
@@ -132,64 +121,43 @@ class OVSColumn(object):
         self.n_min = ovs_base_type.n_min
 
         self.kvs = {}
-        self.desc = self.parse_xml_desc(table_name, column_name, self.kvs)
+        self.process_valuemap(valueMap)
+        self.desc = col_doc
 
-    # Read the description for each column from XML source
-    def parse_xml_rec(self, node, xmlColumn, kvs):
-        columnDesc = " "
-        for column in node.getchildren():
-            if column.tag == 'group':
-                columnDesc = self.parse_xml_rec(column, xmlColumn, kvs)
-            if (column.tag != 'column' or
-                    xmlColumn != column.attrib['name']):
-                continue
+    def process_valuemap(self, valueMap):
+        '''
+        Processes information from the valueMap data structure in the
+        extended schema and fills the kvs dictionary for this column
+        '''
 
-            if('keyname' in column.attrib):
-                self.keyname = column.attrib['keyname']
+        for key, value in valueMap.iteritems():
 
-            if ('key' not in column.attrib):
-                columnDesc = ET.tostring(column, encoding='utf8',
-                                         method='html')
-                continue
+            self.kvs[key] = {}
 
-            # When an attribute is of type string in schema file,
-            # it may have detailed structure information in its
-            # companion XML description, otherwise the parent
-            # column's type is assumed.
-            kvs[column.attrib['key']] = {}
-            if ('type' in column.attrib):
-                typeData = json.loads(column.attrib['type'])
-                base_type = types.BaseType.from_json(typeData)
-                type_, min_, max_ = self.process_type(base_type)
-                enum = base_type.enum
-            else:
-                type_ = self.value_type
-                min_ = self.valueRangeMin
-                max_ = self.valueRangeMax
-                enum = None
+            # Process the values's type
+            base_type = types.BaseType.from_json(value['type'])
+            _type, _min, _max = self.process_type(base_type)
+            enum = base_type.enum
 
-            kvs[column.attrib['key']]['type'] = type_
-            kvs[column.attrib['key']]['rangeMin'] = min_
-            kvs[column.attrib['key']]['rangeMax'] = max_
-            kvs[column.attrib['key']]['enum'] = enum
-            # Since there's no indication of optional in the XML schema,
-            # it inherits its column's. Setting this so that eventually
-            # it can be filled from info in the XML schema
-            kvs[column.attrib['key']]['is_optional'] = self.is_optional
+            # Store this key's type information in kvs
+            self.kvs[key]['type'] = _type
+            self.kvs[key]['rangeMin'] = _min
+            self.kvs[key]['rangeMax'] = _max
+            self.kvs[key]['enum'] = enum
 
-            key_desc = ET.tostring(column, encoding='utf8',
-                                   method='html')
-            kvs[column.attrib['key']]['desc'] = extractColDesc(key_desc)
-        return columnDesc
+            # Setting is_optional per key so that eventually
+            # it can be set per key from data in the schema,
+            # REST's validation should already check this.
+            self.kvs[key]['is_optional'] = self.is_optional
 
-    # Read the description for each column from XML source
-    def parse_xml_desc(self, xmlTable, xmlColumn, kvs):
-        columnDesc = ""
-        for node in xml_tree.iter():
-            if node.tag != 'table' or xmlTable != node.attrib['name']:
-                continue
-            columnDesc = self.parse_xml_rec(node, xmlColumn, kvs)
-            return extractColDesc(columnDesc)
+            # Process this key's documentation information
+            self.kvs[key]['desc'] = None
+            self.kvs[key]['group'] = None
+            if load_doc:
+                if 'doc' in value:
+                    self.kvs[key]['desc'] = ' '.join(value['doc'])
+                if 'group' in value:
+                    self.kvs[key]['group'] = value['group']
 
     def process_type(self, base):
         __type = base.type
@@ -240,12 +208,14 @@ class OVSReference(OVSColumn):
     - is_plural: whether the column is plural
     '''
     def __init__(self, table_name, column_name, ovs_base_type,
-                 is_optional=True, mutable=True, category=None,
+                 is_optional=True, mutable=True, category=None, valueMap=None,
+                 keyname=None, col_doc=None, group=None,
                  relation=OVSDB_SCHEMA_REFERENCE):
 
         super(OVSReference, self).__init__(table_name, column_name,
                                            ovs_base_type, is_optional, mutable,
-                                           category)
+                                           category, None, valueMap, keyname,
+                                           col_doc, group)
 
         key_type = ovs_base_type.key
 
@@ -264,7 +234,7 @@ class OVSReference(OVSColumn):
         # Relationship of the referenced to the current table
         # one of child, parent or reference
         if relation not in RELATIONSHIP_MAP.values():
-            raise error.Error("unknown table relationship %s" % relation)
+            raise error.Error('unknown table relationship %s' % relation)
         else:
             self.relation = relation
 
@@ -286,9 +256,9 @@ class OVSColumnCategory(object):
 
             if per_value_list:
                 for value_dict in per_value_list:
-                    self.check_category(value_dict["category"])
-                    self.per_value[value_dict["value"]] = \
-                        value_dict["category"]
+                    self.check_category(value_dict['category'])
+                    self.per_value[value_dict['value']] = \
+                        value_dict['category']
 
             self.follows = category.get(OVSDB_CATEGORY_FOLLOWS,
                                         None)
@@ -315,26 +285,26 @@ class OVSColumnCategory(object):
     def validate(self, category):
         if category:
             if isinstance(category, dict):
-                if not (OVSDB_CATEGORY_PERVALUE in category
-                        or OVSDB_CATEGORY_FOLLOWS in category):
-                    raise error.Error("Unknown category object "
-                                      "attributes")
+                if not (OVSDB_CATEGORY_PERVALUE in category or
+                        OVSDB_CATEGORY_FOLLOWS in category):
+                    raise error.Error('Unknown category object '
+                                      'attributes')
 
             elif isinstance(category, (str, unicode)):
                 self.check_category(category)
             else:
-                raise error.Error("Unknown category type %s" % type(category))
+                raise error.Error('Unknown category type %s' % type(category))
 
     def check_category(self, category):
         if category not in [OVSDB_SCHEMA_CONFIG,
                             OVSDB_SCHEMA_STATS,
                             OVSDB_SCHEMA_STATUS]:
-            raise error.Error("Unknown category: %s" % value)
+            raise error.Error('Unknown category: %s' % value)
 
 
 class OVSTable(object):
-    """__init__() functions as the class constructor"""
-    def __init__(self, name, is_root, is_many=True):
+    '''__init__() functions as the class constructor'''
+    def __init__(self, name, is_root, is_many=True, desc=None):
         self.name = name
         self.plural_name = normalizeName(name)
 
@@ -381,43 +351,92 @@ class OVSTable(object):
         # eventually.
         self.indexes = None
 
+        # Table's documentation strings. Named 'desc' to keep
+        # consistency with the 'desc' attribute in OVSColumn
+        self.desc = desc
+
     @staticmethod
-    def from_json(json, name):
-        parser = ovs.db.parser.Parser(json, "schema of table %s" % name)
-        columns_json = parser.get("columns", [dict])
-        mutable = parser.get_optional("mutable", [bool], True)
-        is_root = parser.get_optional("isRoot", [bool], False)
-        max_rows = parser.get_optional("maxRows", [int])
-        indexes_json = parser.get_optional("indexes", [list], [[]])
+    def from_json(_json, name):
+        parser = ovs.db.parser.Parser(_json, 'schema of table %s' % name)
+        columns_json = parser.get('columns', [dict])
+        mutable = parser.get_optional('mutable', [bool], True)
+        is_root = parser.get_optional('isRoot', [bool], False)
+        max_rows = parser.get_optional('maxRows', [int])
+        indexes_json = parser.get_optional('indexes', [list], [[]])
+
+        doc = None
+
+        # Though these will not be used if load_doc=False,
+        # they have to be parsed or OVS' Parser will fail
+        _title = parser.get_optional('title', [str, unicode])
+        _doc = parser.get_optional('doc', [list, str, unicode])
+
+        if load_doc:
+            doc = []
+            if _title:
+                doc = [_title]
+            if _doc:
+                doc.extend(_doc)
+            doc = ' '.join(doc)
 
         parser.finish()
 
         if max_rows is None:
             max_rows = sys.maxint
         elif max_rows <= 0:
-            raise error.Error("maxRows must be at least 1", json)
+            raise error.Error('maxRows must be at least 1', _json)
 
         if not columns_json:
-            raise error.Error("table must have at least one column", json)
+            raise error.Error('table must have at least one column', _json)
 
-        table = OVSTable(name, is_root, max_rows != 1)
+        table = OVSTable(name, is_root, max_rows != 1, desc=doc)
         table.index_columns = indexes_json[0]
 
         for column_name, column_json in columns_json.iteritems():
-            parser = ovs.db.parser.Parser(column_json, "column %s" % name)
+            parser = ovs.db.parser.Parser(column_json, 'column %s' % name)
             # The category can be a str or a object. The object inside can
             # have the following keys:
             # per-value: matches the possible value with the desired category
             # follows: Reference to the column used to determine the column
             #          category
-            category = OVSColumnCategory(parser.get_optional("category",
+            category = OVSColumnCategory(parser.get_optional('category',
                                                              [str, unicode,
                                                               dict]))
-            relationship = parser.get_optional("relationship", [str, unicode])
-            mutable = parser.get_optional("mutable", [bool], True)
-            ephemeral = parser.get_optional("ephemeral", [bool], False)
-            type_ = types.Type.from_json(parser.get("type", [dict, str,
-                                                             unicode]))
+            relationship = parser.get_optional('relationship', [str, unicode])
+            mutable = parser.get_optional('mutable', [bool], True)
+
+            # Ephemereal is not used (yet) in REST, but it's
+            # parsed so that the parser does not give an error
+            parser.get_optional('ephemeral', [bool], False)
+
+            emptyValue = parser.get_optional('emptyValue',
+                                             [int, str, unicode, bool])
+            keyname = parser.get_optional('keyname', [str, unicode])
+
+            # Pre-process type, cleaning it up from OPS modifications
+            # (e.g. 'valueMap', adding back 'set' to the enum format)
+            _type = parser.get('type', [dict, str, unicode])
+            convert_enums(_type)
+            valueMap = {}
+            if isinstance(_type, dict):
+                valueMap = _type.pop('valueMap', {})
+            _type = types.Type.from_json(_type)
+
+            # Parse global description for the column
+
+            col_doc = None
+            group = None
+
+            # Though these will not be used if load_doc=False,
+            # they have to be parsed or OVS' Parser will fail
+            _col_doc = parser.get_optional('doc', [list])
+            _group = parser.get_optional('group', [list, str, unicode])
+
+            if load_doc:
+                if _col_doc:
+                    col_doc = ' '.join(_col_doc)
+                group = _group
+
             parser.finish()
 
             is_optional = False
@@ -446,19 +465,25 @@ class OVSTable(object):
 
                 table.references[column_name] = OVSReference(table.name,
                                                              column_name,
-                                                             type_,
+                                                             _type,
                                                              is_optional,
                                                              _mutable,
                                                              category,
+                                                             valueMap,
+                                                             keyname,
+                                                             col_doc,
+                                                             group,
                                                              _relationship)
+
             else:
 
                 # Status and statistics columns are always mutable
                 if category != OVSDB_SCHEMA_CONFIG:
                     _mutable = True
-
-                ovs_column = OVSColumn(table.name, column_name, type_,
-                                       is_optional, _mutable, category)
+                ovs_column = OVSColumn(table.name, column_name, _type,
+                                       is_optional, _mutable, category,
+                                       emptyValue, valueMap, keyname,
+                                       col_doc, group)
 
                 # Save the column in its category group
                 if category == OVSDB_SCHEMA_CONFIG:
@@ -476,8 +501,8 @@ class OVSTable(object):
         for column_name, category in table.dynamic.iteritems():
             if category.follows is not None\
                and category.follows not in table.columns:
-                raise error.Error("Follows column '%s'"
-                                  "doesn't exists at table '%s'"
+                raise error.Error('Follows column "%s"'
+                                  'doesn\'t exists at table "%s"'
                                   % (category.follows, name))
 
         # TODO: indexes should be removed eventually
@@ -495,11 +520,13 @@ class OVSTable(object):
 
 
 class RESTSchema(object):
-    """Schema for REST interface from an OVSDB database."""
+    '''Schema for REST interface from an OVSDB database.'''
 
-    def __init__(self, name, version, tables):
+    def __init__(self, name, version, tables, groups_doc=None):
         self.name = name
         self.version = version
+        # Documentation for groups
+        self.groups_doc = groups_doc
         # A dictionary of table name to OVSTable object mappings
         self.ovs_tables = tables
 
@@ -510,7 +537,7 @@ class RESTSchema(object):
                 if k not in self.reference_map:
                     self.reference_map[k] = v.ref_table
 
-        # tables that has the refereces to one table
+        # tables that has the references to one table
         self.references_table_map = {}
         for table in self.ovs_tables:
             tables_references = get_references_tables(self, table)
@@ -522,11 +549,27 @@ class RESTSchema(object):
             self.plural_name_map[table.plural_name] = table.name
 
     @staticmethod
-    def from_json(json):
-        parser = ovs.db.parser.Parser(json, "extended OVSDB schema")
-        name = parser.get("name", ['id'])
-        version = parser.get_optional("version", [str, unicode])
-        tablesJson = parser.get("tables", [dict])
+    def from_json(_json):
+        parser = ovs.db.parser.Parser(_json, 'extended OVSDB schema')
+
+        # These are not used (yet), but the parser fails if they are not parsed
+        parser.get_optional('$schema', [str, unicode])
+        parser.get_optional('id', [str, unicode])
+
+        name = parser.get('name', ['id'])
+        version = parser.get_optional('version', [str, unicode])
+        tablesJson = parser.get('tables', [dict])
+
+        groups_doc = None
+        # Though these will not be used if load_doc=False,
+        # they have to be parsed or OVS' Parser will fail
+        _groups_doc = parser.get_optional('groups', [dict])
+
+        if load_doc:
+            groups_doc = _groups_doc
+            for group in groups_doc:
+                groups_doc[group] = ' '.join(groups_doc[group]['doc'])
+
         parser.finish()
 
         if (version is not None and
@@ -542,16 +585,32 @@ class RESTSchema(object):
         # parent pointers which cannot be handled in place.
         for tableName, table in tables.iteritems():
             for columnName, column in table.references.iteritems():
-                if column.relation == "child":
+                if column.relation == 'child':
                     table.children.append(columnName)
                     if tables[column.ref_table].parent is None:
                         tables[column.ref_table].parent = tableName
-                elif column.relation == "parent":
+                elif column.relation == 'parent':
                     if tableName not in tables[column.ref_table].children:
                         tables[column.ref_table].children.append(tableName)
                     table.parent = column.ref_table
 
-        return RESTSchema(name, version, tables)
+        return RESTSchema(name, version, tables, groups_doc)
+
+
+def convert_enums(_type):
+    '''
+    Looks for enums recursively in the dictionary and
+    converts them from a list of keywords, to an OVS 'set'.
+    E.g. from 'enum': [<keywords>] to 'enum': ['set', [<keywords>]]
+    '''
+
+    if isinstance(_type, dict):
+        if 'enum' in _type:
+            _type['enum'] = ['set', _type['enum']]
+        else:
+            for key in _type:
+                if isinstance(_type[key], dict):
+                    convert_enums(_type[key])
 
 
 def get_references_tables(schema, ref_table):
@@ -569,18 +628,19 @@ def get_references_tables(schema, ref_table):
 
 def is_immutable(table, schema):
 
-    """
+    '''
     A table is considered IMMUTABLE if REST API cannot add or
     delete a row from it
-    """
+    '''
     table_schema = schema.ovs_tables[table]
 
     # ROOT table
     if table_schema.is_root:
         # CASE 1: if there are no indices, a root table is considered
         #         IMMUTABLE for REST API
-        # CASE 2: if there is at least one index of category OVSDB_SCHEMA_CONFIG,
-        #         a root table is considered MUTABLE for REST API
+        # CASE 2: if there is at least one index of category
+        #         OVSDB_SCHEMA_CONFIG, a root table is considered
+        #         MUTABLE for REST API
 
         # NOTE: an immutable table can still be modified by other daemons
         # running on  the switch. For example, system daemon can modify
@@ -594,7 +654,8 @@ def is_immutable(table, schema):
             return not _has_config_index(table, schema)
         else:
             # child e.g. Bridge
-            # check if the reference in 'parent' is of category OVSDB_SCHEMA_CONFIG
+            # check if the reference in 'parent'
+            # is of category OVSDB_SCHEMA_CONFIG
             parent = table_schema.parent
             parent_schema = schema.ovs_tables[parent]
             children = parent_schema.children
@@ -611,7 +672,8 @@ def is_immutable(table, schema):
                         ref = item
                         break
 
-                if parent_schema.references[ref].category == OVSDB_SCHEMA_CONFIG:
+                if parent_schema.references[ref].category == \
+                        OVSDB_SCHEMA_CONFIG:
                     return False
 
             else:
@@ -622,10 +684,10 @@ def is_immutable(table, schema):
 
 
 def _has_config_index(table, schema):
-    """
+    '''
     return True if table has at least one index column of category
     configuration
-    """
+    '''
     for index in schema.ovs_tables[table].index_columns:
         if index in schema.ovs_tables[table].config:
             return True
@@ -638,22 +700,18 @@ def _has_config_index(table, schema):
     return False
 
 
-def parseSchema(schemaFile, title=None, version=None):
+def parseSchema(schemaFile, title=None, version=None, parse_doc=True):
     # Initialize a global variable here
-    global xml_tree
+    global load_doc
 
-    # Assume the companion XML file and schema file differ only in extension
-    # for their names (.extschema vs .xml)
-    xmlFile = schemaFile[:-len("extschema")] + "xml"
-    with open(xmlFile, 'rt') as f:
-        xml_tree = ET.parse(f)
+    load_doc = parse_doc
 
     schema = RESTSchema.from_json(ovs.json.from_file(schemaFile))
 
     if title is None:
         title = schema.name
     if version is None:
-        version = "UNKNOWN"
+        version = 'UNKNOWN'
 
     # add mutable flag to OVSTable
     for name, table in schema.ovs_tables.iteritems():
@@ -663,7 +721,7 @@ def parseSchema(schemaFile, title=None, version=None):
 
 
 def usage():
-    print """\
+    print '''\
 %(argv0)s: REST API meta schema file parser
 Parse the meta schema file based on OVSDB schema to obtain category and
 relation information for each REST resource.
@@ -674,17 +732,17 @@ The following options are also available:
   --title=TITLE               use TITLE as title instead of schema name
   --version=VERSION           use VERSION to display on document footer
   -h, --help                  display this help message\
-""" % {'argv0': sys.argv[0]}
+''' % {'argv0': sys.argv[0]}
     sys.exit(0)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         try:
             options, args = getopt.gnu_getopt(sys.argv[1:], 'h',
                                               ['title=', 'version=', 'help'])
         except getopt.GetoptError, geo:
-            sys.stderr.write("%s: %s\n" % (argv0, geo.msg))
+            sys.stderr.write('%s: %s\n' % (sys.argv[0], geo.msg))
             sys.exit(1)
 
         title = None
@@ -700,61 +758,70 @@ if __name__ == "__main__":
                 sys.exit(0)
 
         if len(args) != 1:
-            sys.stderr.write("Exactly 1 non-option arguments required "
-                             "(use --help for help)\n")
+            sys.stderr.write('Exactly 1 non-option arguments required '
+                             '(use --help for help)\n')
             sys.exit(1)
 
         schema = parseSchema(args[0])
 
+        print('Groups: ')
+        for group, doc in schema.groups_doc.iteritems():
+            print('%s: %s' % (group, doc))
+
         for table_name, table in schema.ovs_tables.iteritems():
-            print("Table %s: " % table_name)
-            print("Parent  = %s" % table.parent)
-            print("Configuration attributes: ")
+            print('Table %s: ' % table_name)
+            print('Parent  = %s' % table.parent)
+            print('Description = %s' % table.desc)
+            print('Configuration attributes: ')
             for column_name, column in table.config.iteritems():
-                print("Col name = %s: %s" % (column_name,
-                      "plural" if column.is_list else "singular"))
-                print("n_min = %d: n_max = %d" % (column.n_min, column.n_max))
-                print("key type = %s: min = %s, max = %s" % (column.type,
+                print('Col name = %s: %s' % (column_name,
+                      'plural' if column.is_list else 'singular'))
+                print('n_min = %d: n_max = %d' % (column.n_min, column.n_max))
+                print('key type = %s: min = %s, max = %s' % (column.type,
                       column.rangeMin, column.rangeMax))
-                print("key enum = %s" % column.enum)
-                print("key kvs = %s" % column.kvs)
+                print('key enum = %s' % column.enum)
+                print('key emptyValue = %s' % column.emptyValue)
+                print('key keyname = %s' % column.keyname)
+                print('key kvs = %s' % column.kvs)
                 if column.value_type is not None:
-                    print("value type = %s: min = %s, max = %s" %
+                    print('value type = %s: min = %s, max = %s' %
                           (column.value_type,
                            column.valueRangeMin,
                            column.valueRangeMax))
-            print("Status attributes: ")
+            print('Status attributes: ')
             for column_name, column in table.status.iteritems():
-                print("Col name = %s: %s" % (column_name,
-                      "plural" if column.is_list else "singular"))
-                print("n_min = %d: n_max = %d" % (column.n_min, column.n_max))
-                print("key type = %s: min = %s, max = %s" %
+                print('Col name = %s: %s' % (column_name,
+                      'plural' if column.is_list else 'singular'))
+                print('n_min = %d: n_max = %d' % (column.n_min, column.n_max))
+                print('key type = %s: min = %s, max = %s' %
                       (column.type, column.rangeMin, column.rangeMax))
                 if column.value_type is not None:
-                    print("value type = %s: min = %s, max = %s" %
+                    print('value type = %s: min = %s, max = %s' %
                           (column.value_type,
                            column.valueRangeMin,
                            column.valueRangeMax))
-            print("Stats attributes: ")
+            print('Stats attributes: ')
             for column_name, column in table.stats.iteritems():
-                print("Col name = %s: %s" % (column_name,
-                      "plural" if column.is_list else "singular"))
-                print("n_min = %d: n_max = %d" % (column.n_min, column.n_max))
-                print("key type = %s: min = %s, max = %s" %
+                print('Col name = %s: %s' % (column_name,
+                      'plural' if column.is_list else 'singular'))
+                print('n_min = %d: n_max = %d' % (column.n_min, column.n_max))
+                print('key type = %s: min = %s, max = %s' %
                       (column.type, column.rangeMin, column.rangeMax))
                 if column.value_type is not None:
-                    print("value type = %s: min = %s, max = %s" %
+                    print('value type = %s: min = %s, max = %s' %
                           (column.value_type,
                            column.valueRangeMin,
                            column.valueRangeMax))
-            print("Subresources: ")
+            print('Subresources: ')
             for column_name, column in table.references.iteritems():
-                print("Col name = %s: %s, %s" % (column_name, column.relation,
-                      "plural" if column.is_plural else "singular"))
-            print("\n")
+                print('Col name = %s: %s, %s, keyname=%s' %
+                      (column_name, column.relation,
+                       'plural' if column.is_plural else 'singular',
+                       column.keyname))
+            print('\n')
 
     except error.Error, e:
-        sys.stderr.write("%s\n" % e.msg)
+        sys.stderr.write('%s: %s\n' % (e.msg, e.json))
         sys.exit(1)
 
 # Local variables:
