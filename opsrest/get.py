@@ -16,21 +16,15 @@ from opsrest.constants import *
 from opsrest.utils import utils
 from opsrest.utils import getutils
 from opsrest import verify
-from opsrest.exceptions import (
-    InternalError,
-    TransactionFailed
-)
 
 import httplib
 import types
 
 from tornado.log import app_log
-from tornado import gen
 
-@gen.coroutine
+
 def get_resource(idl, resource, schema, uri=None,
-                 selector=None, query_arguments=None,
-                 fetch_readonly=False):
+                 selector=None, query_arguments=None):
 
     depth = getutils.get_depth_param(query_arguments)
 
@@ -64,25 +58,18 @@ def get_resource(idl, resource, schema, uri=None,
             if ERROR in validation_result:
                 return validation_result
 
-        # Fetch all read-only columns prior to retrieving row data
-        if fetch_readonly:
-            row = idl.tables[resource.table].rows[resource.row]
-            utils.fetch_readonly_columns(schema, resource.table, idl, [row])
-
         return get_row_json(resource.row, resource.table, schema,
-                            idl, uri, selector, depth,
-                            fetch_readonly=fetch_readonly)
+                            idl, uri, selector, depth)
     else:
         # Other tables
         return get_resource_from_db(resource, schema, idl, uri,
-                                    selector, query_arguments, depth,
-                                    fetch_readonly)
+                                    selector, query_arguments, depth)
 
 
 # get resource from db using resource->next_resource pair
 def get_resource_from_db(resource, schema, idl, uri=None,
                          selector=None, query_arguments=None,
-                         depth=0, fetch_readonly=False):
+                         depth=0):
 
     resource_result = None
     uri = _get_uri(resource, schema, uri)
@@ -122,17 +109,10 @@ def get_resource_from_db(resource, schema, idl, uri=None,
     # Get the resource result according to result type
     if is_collection:
         resource_result = get_collection_json(resource, schema, idl, uri,
-                                              selector, depth, fetch_readonly)
+                                              selector, depth)
     else:
-        # Fetch all read-only columns prior to retrieving row data
-        if fetch_readonly:
-            row = idl.tables[resource.next.table].rows[resource.next.row]
-            utils.fetch_readonly_columns(schema, resource.next.table, idl,
-                                         [row])
-
         resource_result = get_row_json(resource.next.row, resource.next.table,
-                                       schema, idl, uri, selector, depth,
-                                       fetch_readonly=fetch_readonly)
+                                       schema, idl, uri, selector, depth)
 
     # Post process data if it necessary
     if (resource_result and depth and isinstance(resource_result, list)):
@@ -147,32 +127,28 @@ def get_resource_from_db(resource, schema, idl, uri=None,
     return resource_result
 
 
-def get_collection_json(resource, schema, idl, uri, selector, depth,
-                        fetch_readonly=False):
+def get_collection_json(resource, schema, idl, uri, selector, depth):
 
     if resource.relation is OVSDB_SCHEMA_TOP_LEVEL:
         resource_result = get_table_json(resource.next.table, schema, idl, uri,
-                                         selector, depth, fetch_readonly)
+                                         selector, depth)
 
     elif resource.relation is OVSDB_SCHEMA_CHILD:
         resource_result = get_column_json(resource.column, resource.row,
                                           resource.table, schema, idl, uri,
-                                          selector, depth,
-                                          fetch_readonly=fetch_readonly)
+                                          selector, depth)
 
     elif resource.relation is OVSDB_SCHEMA_BACK_REFERENCE:
         resource_result = get_back_references_json(resource.row,
                                                    resource.table,
                                                    resource.next.table, schema,
-                                                   idl, uri, selector, depth,
-                                                   fetch_readonly)
+                                                   idl, uri, selector, depth)
 
     return resource_result
 
 
 def get_row_json(row, table, schema, idl, uri, selector=None,
-                 depth=0, depth_counter=0, with_empty_values=False,
-                 fetch_readonly=False):
+                 depth=0, depth_counter=0, with_empty_values=False):
 
     depth_counter += 1
     db_table = idl.tables[table]
@@ -237,7 +213,7 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
 
         temp = get_column_json(key, row, table, schema,
                                idl, uri, selector, depth,
-                               depth_counter, fetch_readonly)
+                               depth_counter)
 
         # The condition below is used to discard the empty list of references
         # in the data returned for get requests
@@ -267,8 +243,7 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
 
 
 # get list of all table row entries
-def get_table_json(table, schema, idl, uri, selector=None, depth=0,
-                   fetch_readonly=False):
+def get_table_json(table, schema, idl, uri, selector=None, depth=0):
 
     db_table = idl.tables[table]
 
@@ -280,23 +255,16 @@ def get_table_json(table, schema, idl, uri, selector=None, depth=0,
             _uri = _create_uri(uri, tmp)
             resources_list.append(_uri)
     else:
-        # Fetch all read-only columns prior to retrieving row data
-        if fetch_readonly:
-            utils.fetch_readonly_columns(schema, table, idl,
-                                         db_table.rows.itervalues())
-
         for row in db_table.rows.itervalues():
             json_row = get_row_json(row.uuid, table, schema, idl, uri,
-                                    selector, depth,
-                                    fetch_readonly=fetch_readonly)
+                                    selector, depth)
             resources_list.append(json_row)
 
     return resources_list
 
 
 def get_column_json(column, row, table, schema, idl, uri,
-                    selector=None, depth=0, depth_counter=0,
-                    fetch_readonly=False):
+                    selector=None, depth=0, depth_counter=0):
 
     db_table = idl.tables[table]
     db_row = db_table.rows[row]
@@ -343,20 +311,12 @@ def get_column_json(column, row, table, schema, idl, uri,
             resources_list.append(_uri)
     # GET with depth
     else:
-        ref_rows = []
         for value in db_col:
-            # Get all referenced rows
-            ref_rows.append(_get_referenced_row(schema, table, row,
-                                                column, value, idl))
 
-        # Fetch all read-only columns prior to retrieving row data
-        if fetch_readonly:
-            utils.fetch_readonly_columns(schema, table, idl, ref_rows)
-
-        for ref_row in ref_rows:
+            ref_row = _get_referenced_row(schema, table, row,
+                                          column, value, idl)
             json_row = get_row_json(ref_row.uuid, col_table, schema, idl, uri,
-                                    selector, depth, depth_counter,
-                                    fetch_readonly=fetch_readonly)
+                                    selector, depth, depth_counter)
             resources_list.append(json_row)
 
     return resources_list
@@ -378,7 +338,7 @@ def _get_referenced_row(schema, table, row, column, column_row, idl):
 
 def get_back_references_json(parent_row, parent_table, table,
                              schema, idl, uri, selector=None,
-                             depth=0, fetch_readonly=False):
+                             depth=0):
 
     references = schema.ovs_tables[table].references
     _refCol = None
@@ -401,21 +361,12 @@ def get_back_references_json(parent_row, parent_table, table,
                 _uri = _create_uri(uri, tmp)
                 resources_list.append(_uri)
     else:
-        # Fetch all read-only columns prior to retrieving row data
-        rows = []
         for row in idl.tables[table].rows.itervalues():
             ref = row.__getattr__(_refCol)
             if ref.uuid == parent_row:
-                rows.append(row)
-
-        if fetch_readonly:
-            utils.fetch_readonly_columns(schema, table, idl, rows)
-
-        for row in rows:
-            json_row = get_row_json(row.uuid, table, schema, idl, uri,
-                                    selector, depth,
-                                    fetch_readonly=fetch_readonly)
-            resources_list.append(json_row)
+                json_row = get_row_json(row.uuid, table, schema, idl, uri,
+                                        selector, depth)
+                resources_list.append(json_row)
 
     return resources_list
 

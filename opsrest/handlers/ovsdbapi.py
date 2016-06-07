@@ -102,11 +102,9 @@ class OVSDBAPIHandler(base.BaseHandler):
 
             app_log.debug("Query arguments %s" % self.request.query_arguments)
 
-            result = yield get.get_resource(self.idl, self.resource_path,
-                                            self.schema, self.request.path,
-                                            selector,
-                                            self.request.query_arguments,
-                                            fetch_readonly=True)
+            result = get.get_resource(self.idl, self.resource_path,
+                                      self.schema, self.request.path,
+                                      selector, self.request.query_arguments)
 
             if result is None:
                 self.set_status(httplib.NOT_FOUND)
