@@ -987,8 +987,8 @@ def fetch_readonly_columns(schema, table, idl, rows):
     table_schema = schema.ovs_tables[table]
     txn = ovs.db.idl.Transaction(idl)
 
-    for column in table_schema.readonly_columns:
-        for row in rows:
+    for row in rows:
+        for column in table_schema.readonly_columns:
             row.fetch(column)
 
     status = txn.commit_block()
