@@ -42,7 +42,8 @@ from opsrest.constants import (PASSWD_ERR_FATAL,
                                PASSWD_ERR_SUCCESS,
                                PASSWD_ERR_USER_NOT_FOUND,
                                PASSWD_ERR_PASSWORD_NOT_MATCH,
-                               PASSWD_ERR_INVALID_USER)
+                               PASSWD_ERR_INVALID_USER,
+                               PASSWD_ERR_MAP)
 
 
 class AccountController(BaseController):
@@ -174,8 +175,8 @@ class AccountController(BaseController):
                           PASSWD_ERR_PASSWORD_NOT_MATCH,
                           PASSWD_ERR_INVALID_USER):
                 status_code = httplib.UNAUTHORIZED
-                error = "Invalid credentials for user '%s'" % username
-
+                error = "Invalid credentials for user '%s',"\
+                        "%s" % (username, PASSWD_ERR_MAP[result])
             raise PasswordChangeError(error, status_code)
 
     def __get_username__(self, current_user):
