@@ -134,6 +134,22 @@ PASSWD_ERR_INVALID_PARAM = 9
 PASSWD_ERR_PASSWD_UPD_FAIL = 10
 PASSWD_ERR_SEND_FAILED = 11
 
+PASSWD_ERR_MAP = {}
+PASSWD_ERR_MAP = {PASSWD_ERR_FATAL: "Fatal",
+                  PASSWD_ERR_SUCCESS: "Success",
+                  PASSWD_ERR_USER_NOT_FOUND: "User not found",
+                  PASSWD_ERR_PASSWORD_NOT_MATCH: "Password not matched",
+                  PASSWD_ERR_SHADOW_FILE: "shadow file error",
+                  PASSWD_ERR_INVALID_MSG: "Invalid message",
+                  PASSWD_ERR_INSUFFICIENT_MEM: "Insufficient memory",
+                  PASSWD_ERR_RECV_FAILED: "Receive failed",
+                  PASSWD_ERR_INVALID_OPCODE: "Invalid opcode",
+                  PASSWD_ERR_INVALID_USER: "Invalid user",
+                  PASSWD_ERR_INVALID_PARAM: "Invalid parameter",
+                  PASSWD_ERR_PASSWD_UPD_FAIL: "Password update failed",
+                  PASSWD_ERR_SEND_FAILED: "Send failed"}
+
+
 # Audit Log for Configuration changes only
 AUDIT_LOG_ACCEPTED_REQUESTS = {REQUEST_TYPE_CREATE, REQUEST_TYPE_UPDATE,
                                REQUEST_TYPE_DELETE, REQUEST_TYPE_PATCH}
