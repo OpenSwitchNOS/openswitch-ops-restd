@@ -1113,6 +1113,8 @@ def genCustomAPI(resource_name, path, paths,
         op["description"] = "Get a set of attributes"
         op["tags"] = [resource_name]
 
+        params = []
+        op["parameters"] = params
         responses = {}
         response = {}
         response["description"] = "OK"
@@ -1257,9 +1259,11 @@ def genCustomAPI(resource_name, path, paths,
         op["responses"] = responses
         ops_id["delete"] = op
 
-    path_id = path + "/{id}"
-    paths[path_id] = ops_id
-    paths[path] = ops
+    if ops_id:
+        path_id = path + "/{id}"
+        paths[path_id] = ops_id
+    if ops:
+        paths[path] = ops
 
 
 def getFullConfigDef(schema, definitions):
