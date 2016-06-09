@@ -242,6 +242,7 @@ def delete_all_references(resource, schema, idl):
     for table_name, columns_list in tables_reference.iteritems():
         app_log.debug("Table %s" % table_name)
         app_log.debug("Column list %s" % columns_list)
+        table_schema = schema.ovs_tables[table_name]
         #Iterate each row to see wich tuple has the reference
         for uuid, row_ref in idl.tables[table_name].rows.iteritems():
             #Iterate over each reference column and check if has the reference
@@ -249,6 +250,8 @@ def delete_all_references(resource, schema, idl):
                 #get the referenced values
                 reflist = get_column_data_from_row(row_ref, column_name)
                 if reflist is not None:
+                    if table_schema.references[column_name].kv_type:
+                        reflist = reflist.values()
                     #delete the reference on that row and column
                     delete_row_reference(reflist, row, row_ref, column_name)
 
@@ -345,12 +348,17 @@ def set_reference_items(row, data, reference_keys):
     for key in reference_keys:
         if key in data:
             if isinstance(data[key], ovs.db.idl.Row):
-                row.__setattr__(key, data[key])
+                reflist = data[key]
             elif type(data[key]) is types.ListType:
                 reflist = []
                 for item in data[key]:
                     reflist.append(item)
-                row.__setattr__(key, reflist)
+            else:
+                reflist = {}
+                for k, v in data[key].iteritems():
+                    reflist.update({k: v})
+
+            row.__setattr__(key, reflist)
 
 
 def get_attribute_and_type(row, ovs_column):

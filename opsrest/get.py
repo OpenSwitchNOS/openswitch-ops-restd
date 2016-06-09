@@ -301,16 +301,16 @@ def get_column_json(column, row, table, schema, idl, uri,
     db_table = idl.tables[table]
     db_row = db_table.rows[row]
     db_col = db_row.__getattr__(column)
-
     current_table = schema.ovs_tables[table]
-
-    # list of resources to return
-    resources_list = []
-
+    _kv_type = current_table.references[column].kv_type
     # Reference Column
     col_table = current_table.references[column].ref_table
     column_table = schema.ovs_tables[col_table]
 
+    if _kv_type:
+        resources_list = {}
+    else:
+        resources_list = []
     # GET without depth
     if not depth:
         # Is a top level table
@@ -323,41 +323,61 @@ def get_column_json(column, row, table, schema, idl, uri,
                 uri = uri.rstrip('/')
                 uri += '/' + column_table.plural_name
 
-        for value in db_col:
+        if _kv_type:
+            key_type = current_table.references[column].kv_key_type.name
+            for k, v in db_col.iteritems():
+                # Reference with different parent, search the parent
+                if column_table.parent is not None and \
+                        column_table.parent != current_table.name:
+                    uri = _get_base_uri()
+                    uri += utils.get_reference_parent_uri(col_table, v,
+                                                          schema, idl)
+                    uri += column_table.plural_name
 
-            ref_row = _get_referenced_row(schema, table, row,
-                                          column, value, idl)
+                # Set URI for key
+                tmp = utils.get_table_key(v, column_table.name, schema, idl)
+                # TODO: Support other types
+                if key_type == INTEGER:
+                    k = str(k)
+                _uri = _create_uri(uri, tmp)
+                resources_list.update({k: _uri})
 
-            # Reference with different parent, search the parent
-            if column_table.parent is not None and \
-                    column_table.parent != current_table.name:
-                uri = _get_base_uri()
-                uri += utils.get_reference_parent_uri(col_table, ref_row,
-                                                      schema, idl)
-                uri += column_table.plural_name
+        else:
+            for value in db_col:
+                # Reference with different parent, search the parent
+                if column_table.parent is not None and \
+                        column_table.parent != current_table.name:
+                    uri = _get_base_uri()
+                    uri += utils.get_reference_parent_uri(col_table, value,
+                                                          schema, idl)
+                    uri += column_table.plural_name
 
-            # Set URI for key
-            tmp = utils.get_table_key(ref_row, column_table.name, schema, idl)
-            _uri = _create_uri(uri, tmp)
+                # Set URI for key
+                tmp = utils.get_table_key(value, column_table.name, schema, idl)
+                _uri = _create_uri(uri, tmp)
 
-            resources_list.append(_uri)
+                resources_list.append(_uri)
     # GET with depth
     else:
         ref_rows = []
-        for value in db_col:
-            # Get all referenced rows
-            ref_rows.append(_get_referenced_row(schema, table, row,
-                                                column, value, idl))
+        if _kv_type:
+            ref_rows = db_col.values()
+            ref_keys = db_col.keys()
+        else:
+            ref_rows = db_col
 
         # Fetch all read-only columns prior to retrieving row data
         if fetch_readonly:
             utils.fetch_readonly_columns(schema, table, idl, ref_rows)
 
-        for ref_row in ref_rows:
+        for index, ref_row in enumerate(ref_rows):
             json_row = get_row_json(ref_row.uuid, col_table, schema, idl, uri,
                                     selector, depth, depth_counter,
                                     fetch_readonly=fetch_readonly)
-            resources_list.append(json_row)
+            if _kv_type:
+                resources_list.update({ref_keys[index]: json_row})
+            else:
+                resources_list.append(json_row)
 
     return resources_list
 
