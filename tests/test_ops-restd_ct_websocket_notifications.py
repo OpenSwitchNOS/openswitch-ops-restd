@@ -1520,7 +1520,7 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         # which is used for verifying the modification notification.
         update_cfg = {
             "configuration": {
-                "bgp_routers": []
+                "bgp_routers": {}
             }
         }
         info("### Verifying received modified notification for "
