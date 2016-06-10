@@ -7,20 +7,25 @@ import tornado.autoreload
 from tornado.options import options
 import tornado.web
 from tornado.ioloop import IOLoop
+from tornado.log import app_log
+import tornado.http1connection
+
 from opsrest.settings import settings
 from opsrest.application import OvsdbApiApplication
 from opsrest.manager import OvsdbConnectionManager
-from tornado.log import app_log
+import ops.dc
+
 import ovs.unixctl
 import ovs.unixctl.server
 import ops_diagdump
-import tornado.http1connection
 import ovs.vlog
 import argparse
 import subprocess
 import os
 from tempfile import mkstemp
 
+
+vlog=ovs.vlog.Vlog('restd')
 # enable logging
 from tornado.log import enable_pretty_logging
 options.logging = settings['logging']
