@@ -79,8 +79,7 @@ class NotificationHandler():
 
         resource = parse.parse_url_path(resource_uri, self._schema, idl)
 
-        # Needs to be at least a top-level resource
-        if resource is None or resource.next is None:
+        if resource is None:
             raise SubscriptionInvalidResource("Invalid resource URI " +
                                               resource_uri)
 
@@ -101,6 +100,7 @@ class NotificationHandler():
                                                    self._schema, idl)
 
         # Get the last resource while preserving the parent resource.
+        # None parent resource indicates the System table.
         parent_resource = None
         while resource.next is not None:
             parent_resource = resource
@@ -109,7 +109,7 @@ class NotificationHandler():
         subscriber_name = self._get_subscriber_name(subscriber_row, idl)
 
         subscription = None
-        if is_resource_type_collection(parent_resource):
+        if parent_resource and is_resource_type_collection(parent_resource):
             row_uuids = self.get_collection_row_uuids(parent_resource, idl)
             uris = get_collection_json(parent_resource, self._schema,
                                        idl, resource_uri, None, 0)
