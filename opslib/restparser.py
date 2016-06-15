@@ -76,7 +76,7 @@ def extractColDesc(column_desc):
 class OVSColumn(object):
     """__init__() functions as the class constructor"""
     def __init__(self, table, col_name, type_, is_optional=True,
-                 mutable=True, category=None):
+                 mutable=True, category=None, loadDesc = False):
         self.name = col_name
 
         # category type of this column
@@ -108,7 +108,7 @@ class OVSColumn(object):
         self.n_min = type_.n_min
 
         self.kvs = {}
-        self.desc = self.parse_xml_desc(table.name, col_name, self.kvs)
+        self.desc = self.parse_xml_desc(table.name, col_name, self.kvs) if loadDesc else ""
 
     # Read the description for each column from XML source
     def parse_xml_rec(self, node, xmlColumn, kvs):
@@ -354,7 +354,7 @@ class OVSTable(object):
         self.indexes = None
 
     @staticmethod
-    def from_json(json, name):
+    def from_json(json, name, loadDescription):
         parser = ovs.db.parser.Parser(json, "schema of table %s" % name)
         columns_json = parser.get("columns", [dict])
         mutable = parser.get_optional("mutable", [bool], True)
@@ -412,7 +412,7 @@ class OVSTable(object):
                                                                  type_,
                                                                  True,
                                                                  mutable,
-                                                                 category)
+                                                                 category, loadDescription)
             elif relationship == "m:1":
                 table.references[column_name] = OVSReference(type_, "parent",
                                                              mutable, category)
@@ -425,17 +425,17 @@ class OVSTable(object):
             elif category == "configuration":
                 table.config[column_name] = OVSColumn(table, column_name,
                                                       type_, is_optional,
-                                                      mutable, category)
+                                                      mutable, category, loadDescription)
             elif category == "status":
                 is_readonly_column = True
                 table.status[column_name] = OVSColumn(table, column_name,
                                                       type_, is_optional,
-                                                      True, category)
+                                                      True, category, loadDescription)
             elif category == "statistics":
                 is_readonly_column = True
                 table.stats[column_name] = OVSColumn(table, column_name,
                                                      type_, is_optional,
-                                                     True, category)
+                                                     True, category, loadDescription)
             else:
                 # Skip columns that do not have a handled relationship or
                 # category.
@@ -503,7 +503,7 @@ class RESTSchema(object):
             self.plural_name_map[table.plural_name] = table.name
 
     @staticmethod
-    def from_json(json):
+    def from_json(json, loadDescription):
         parser = ovs.db.parser.Parser(json, "extended OVSDB schema")
         name = parser.get("name", ['id'])
         version = parser.get_optional("version", [str, unicode])
@@ -517,7 +517,7 @@ class RESTSchema(object):
 
         tables = {}
         for tableName, tableJson in tablesJson.iteritems():
-            tables[tableName] = OVSTable.from_json(tableJson, tableName)
+            tables[tableName] = OVSTable.from_json(tableJson, tableName, loadDescription)
 
         # Backfill the parent/child relationship info, mostly for
         # parent pointers which cannot be handled in place.
@@ -619,7 +619,7 @@ def _has_config_index(table, schema):
     return False
 
 
-def parseSchema(schemaFile, title=None, version=None):
+def parseSchema(schemaFile, title=None, version=None, loadDescription = False):
     # Initialize a global variable here
     global xml_tree
 
@@ -629,7 +629,7 @@ def parseSchema(schemaFile, title=None, version=None):
     with open(xmlFile, 'rt') as f:
         xml_tree = ET.parse(f)
 
-    schema = RESTSchema.from_json(ovs.json.from_file(schemaFile))
+    schema = RESTSchema.from_json(ovs.json.from_file(schemaFile), loadDescription)
 
     if title is None:
         title = schema.name
