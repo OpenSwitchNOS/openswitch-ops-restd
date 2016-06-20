@@ -1,0 +1,10 @@
+Code-Review+1: Javier Albornoz <javier.albornoz@hpe.com>
+Code-Review+2: Daniela Ramirez <daniela.rch@hpe.com>
+Code-Review+2: Eduardo Ramírez <eramireza@hpe.com>
+Verified+2: Eduardo Ramírez <eramireza@hpe.com>
+Workflow+1: Eduardo Ramírez <eramireza@hpe.com>
+Submitted-by: Eduardo Ramírez <eramireza@hpe.com>
+Submitted-at: Mon, 20 Jun 2016 17:12:57 +0000
+Reviewed-on: https://review.openswitch.net/10079
+Project: openswitch/ops-restd
+Branch: refs/heads/feature/schema_modularity
