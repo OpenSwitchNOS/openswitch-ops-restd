@@ -197,7 +197,8 @@ def genCoreParams(table, parent_plurality, parents, resource_name,
             param = {}
             param["name"] = "p"*(depth-level) + "id"
             param["in"] = "path"
-            param["description"] = normalizeName(parents[level], plural) + " id"
+            param["description"] = normalizeName(parents[level], plural) + \
+                " id"
             param["required"] = True
             param["type"] = "string"
             params.append(param)
@@ -206,7 +207,8 @@ def genCoreParams(table, parent_plurality, parents, resource_name,
         param = {}
         param["name"] = "id"
         param["in"] = "path"
-        param["description"] = normalizeName(resource_name, plural) + " id"
+        param["description"] = normalizeName(resource_name, plural) + \
+            " id"
         param["required"] = True
         param["type"] = "string"
         params.append(param)
@@ -230,8 +232,9 @@ def genGetParams(table, is_instance=False):
     param = {}
     param["name"] = "depth"
     param["in"] = "query"
-    param["description"] = "maximum depth of subresources included in result, " + \
-                           "where depth value can be between zero and ten"
+    param["description"] = "maximum depth of subresources included in " + \
+                           "result, where depth value can be between zero " + \
+                           "and ten"
     param["required"] = False
     param["type"] = "string"
     params.append(param)
@@ -242,8 +245,8 @@ def genGetParams(table, is_instance=False):
         param["name"] = "sort"
         param["in"] = "query"
         param["description"] = "comma separated list of columns to sort " + \
-                                "results by, add a - (dash) at the beginning " + \
-                                "to make sort descending"
+                               "results by, add a - (dash) at the " + \
+                               "beginning to make sort descending"
         param["required"] = False
         param["type"] = "string"
         params.append(param)
@@ -252,7 +255,7 @@ def genGetParams(table, is_instance=False):
         param["name"] = "offset"
         param["in"] = "query"
         param["description"] = "index of the first element from the result" + \
-                                " list to be returned"
+                               " list to be returned"
         param["required"] = False
         param["type"] = "integer"
         params.append(param)
@@ -285,7 +288,8 @@ def genGetParams(table, is_instance=False):
                 param = {}
                 param["name"] = column
                 param["in"] = "query"
-                param["description"] = "filter '%s' by specified value" % column
+                param["description"] = "filter '%s' by specified value" \
+                    % column
                 param["required"] = False
 
                 if data.type == types.IntegerType:
@@ -450,7 +454,8 @@ def genPutInstance(table, parent_plurality, parents, resource_name, is_plural):
         return op
 
 
-def genPatchInstance(table, parent_plurality, parents, resource_name, is_plural):
+def genPatchInstance(table, parent_plurality, parents, resource_name,
+                     is_plural):
     if table.config:
         op = {}
         op["summary"] = "Update configuration"
@@ -563,13 +568,41 @@ def genBaseTypeList(type, desc):
     return sub
 
 
+def get_ref_key_and_type(table_name, parent_table, schema):
+    keyName = None
+    keyname_type = None
+
+    if parent_table:
+        for col_ref_name, ref_table in \
+                schema.ovs_tables[parent_table].references.iteritems():
+            if str(ref_table.ref_table) == table_name:
+                try:
+                    keyName = schema.ovs_tables[parent_table]. \
+                        references[col_ref_name].column.keyname
+                    keyname_type = str(schema.ovs_tables[parent_table].
+                                       references[col_ref_name].column.type)
+                except:
+                    keyName = None
+                break
+
+    return keyName, keyname_type
+
+
 # Generate definitions including "properties" and "required" for all columns.
 # Tuples of "properties" dictionary and "required" array are returned.
-def genAllColDefinition(cols, table_name, definitions):
+def genAllColDefinition(cols, table_name, definitions,
+                        table_parent=None, schema=None):
     properties = {}
     required = []
+
+    keyName, keyname_type = get_ref_key_and_type(table_name, table_parent,
+                                                 schema)
     for colName, col in cols:
         properties[colName] = genDefinition(table_name, col, definitions)
+        if keyName:
+            properties[keyName] = {'type': keyname_type,
+                                   'description': 'Forward reference key'}
+            required.append(keyName)
 
         if not col.is_optional:
             required.append(col.name)
@@ -642,7 +675,7 @@ def refProperties(schema, table, col_name):
     if table.references[col_name].is_plural:
         sub["type"] = "array"
         sub["description"] = "A list of " + child_table.name \
-                              + " references"
+                             + " references"
         item = {}
         item["$ref"] = "#/definitions/Resource"
         sub["items"] = item
@@ -655,7 +688,8 @@ def refProperties(schema, table, col_name):
 
 def getDefinition(schema, table, definitions):
     properties_config, required = genAllColDefinition(table.config.iteritems(),
-                                                      table.name, definitions)
+                                                      table.name, definitions,
+                                                      table.parent, schema)
     properties_full = copy.deepcopy(properties_config)
 
     # References are included in configuration if and only if they belong
@@ -838,8 +872,7 @@ def genPatchDefinition(definitions):
     patch_from["description"] = "A JSON Pointer. "\
         "Target location where the operation is performed."
 
-    properties = {
-                  "op" : patch_op,
+    properties = {"op": patch_op,
                   "path": patch_path,
                   "value": patch_value,
                   "from": patch_from
@@ -899,7 +932,7 @@ def genAPI(paths, definitions, schema, table, resource_name, parent,
             ops["put"] = op
 
         op = genPatchInstance(table, parent_plurality, parents,
-                            resource_name, is_plural)
+                              resource_name, is_plural)
         if op is not None:
             ops["patch"] = op
 
@@ -919,7 +952,7 @@ def genAPI(paths, definitions, schema, table, resource_name, parent,
             ops["put"] = op
 
         op = genPatchInstance(table, parent_plurality, parents,
-                            resource_name, is_plural)
+                              resource_name, is_plural)
         if op is not None:
             ops["patch"] = op
 
@@ -1207,7 +1240,8 @@ def genCustomAPI(resource_name, path, paths,
         # Update Operation
         op = {}
         op["summary"] = "Update configuration"
-        op["description"] = "Update configuration using JSON PATCH Specification"
+        op["description"] = "Update configuration using JSON PATCH " + \
+                            "Specification"
         op["tags"] = [resource_name]
 
         params = []
@@ -1378,6 +1412,7 @@ def genUserLogin(paths):
 
     paths[path] = ops
 
+
 def genUserLogout(paths):
     path = "/logout"
 
@@ -1410,6 +1445,7 @@ def genUserLogout(paths):
     ops["post"] = op
 
     paths[path] = ops
+
 
 def genLogsAPI(paths, definitions):
     path = "/logs"
@@ -1714,6 +1750,7 @@ The following options are also available:
 
 
 if __name__ == "__main__":
+
     try:
         try:
             options, args = getopt.gnu_getopt(sys.argv[1:], 'h',
