@@ -164,7 +164,6 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         remove_server_crt()
 
     def setup_method(self, method):
-        sleep(2)
         pass
 
     def teardown_method(self, method):

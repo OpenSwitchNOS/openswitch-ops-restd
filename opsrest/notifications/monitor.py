@@ -18,10 +18,9 @@ from opsrest.constants import CHANGES_CB_TYPE, ESTABLISHED_CB_TYPE
 
 
 class OvsdbNotificationMonitor:
-    def __init__(self, remote, schema, rest_schema, notification_callback):
+    def __init__(self, remote, schema, notification_callback):
         self.remote = remote
         self.schema = schema
-        self.rest_schema = rest_schema
         self.tables_monitored = set([])
         self.manager = None
         self.notify_cb = notification_callback
@@ -61,8 +60,7 @@ class OvsdbNotificationMonitor:
     def start_new_manager(self):
         app_log.debug("Starting new manager")
 
-        manager = OvsdbConnectionManager(self.remote, self.schema,
-                                         self.rest_schema)
+        manager = OvsdbConnectionManager(self.remote, self.schema)
         manager.start(self.tables_monitored, True)
 
         # Add callback for detecting changes to subscribed resources
