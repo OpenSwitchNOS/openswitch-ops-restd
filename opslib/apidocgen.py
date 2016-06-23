@@ -1685,7 +1685,7 @@ def getFullAPI(schema):
 
 
 def docGen(schemaFile, xmlFile, title=None, version=None):
-    schema = parseSchema(schemaFile)
+    schema = parseSchema(schemaFile, loadDescription=True)
 
     # Special treat System table as /system resource
     schema.ovs_tables["System"] = schema.ovs_tables.pop("System")
