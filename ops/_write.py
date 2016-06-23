@@ -259,7 +259,8 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None, parent=None, p
             return (None, None)
         else:
             new = True
-            validator.add_resource_op(ops.constants.REQUEST_TYPE_CREATE, row, table_name)
+            validator.add_resource_op(ops.constants.REQUEST_TYPE_CREATE,
+                                      row, table_name, parent, parent_table)
             vlog.dbg('insert row succeeded, adding new row with index %s to table %s' % (row_index, table_name))
 
         if table_name not in global_ref_list:
@@ -268,7 +269,8 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None, parent=None, p
 
     else:
         if ops.utils.set_config_columns(row_data, row, table_name, extschema, idl):
-            validator.add_resource_op(ops.constants.REQUEST_TYPE_UPDATE, row, table_name)
+            validator.add_resource_op(ops.constants.REQUEST_TYPE_UPDATE, row,
+                                      table_name, parent, parent_table)
 
     # configure children
     for key in table_schema.children:
