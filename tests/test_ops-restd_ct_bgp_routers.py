@@ -176,6 +176,7 @@ class QueryBGPRoutersTest (OpsVsiTest):
         info('Successful\n')
 
 
+@pytest.mark.skipif(True, reason="Disabling since test case already ported.")
 class Test_bgp_routers:
     def setup(self):
         pass

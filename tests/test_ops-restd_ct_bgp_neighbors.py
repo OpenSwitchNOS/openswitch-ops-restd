@@ -228,6 +228,7 @@ class QueryBGPNeighborsTest (OpsVsiTest):
         info("\n")
 
 
+@pytest.mark.skipif(True, reason="Disabling since test case already ported.")
 class Test_bgp_neighbors:
 
     def setup(self):
