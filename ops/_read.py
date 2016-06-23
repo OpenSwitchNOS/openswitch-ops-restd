@@ -44,24 +44,6 @@ def get_row_data(row, table_name, schema, idl, index=None):
     if not ops.utils.has_config_category(categories):
         return None
 
-    for column_name in categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
-        column_data = row.__getattr__(column_name)
-
-        # Do not include empty columns
-        if column_data is None or column_data == {} or column_data == [] or column_data == '':
-            continue
-
-        row_data[column_name] = column_data
-
-    # get all non-config index columns
-    for key in table_schema.indexes:
-
-        if key is 'uuid':
-            continue
-
-        if key not in categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
-            row_data[key] = row.__getattr__(key)
-
     # Iterate over all children (forward and backward references) in the row
     for child_name in table_schema.children:
 
@@ -185,11 +167,29 @@ def get_row_data(row, table_name, schema, idl, index=None):
 
             row_data[refname] = refdata
 
-    if not row_data:
-        return None
+    for column_name in categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
+        column_data = row.__getattr__(column_name)
 
-    vlog.dbg('read row %s with index %s from table %s' % (str(row.uuid), index, table_name))
-    return {index: row_data}
+        # Do not include empty columns
+        if column_data is None or column_data == {} or column_data == [] or column_data == '':
+            continue
+
+        row_data[column_name] = column_data
+
+    if row_data:
+        # get all non-config index columns
+        for key in table_schema.indexes:
+
+            if key is 'uuid':
+                continue
+
+            if key not in categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
+                row_data[key] = row.__getattr__(key)
+
+        vlog.dbg('read row %s with index %s from table %s' % (str(row.uuid), index, table_name))
+        return {index: row_data}
+
+    return None
 
 
 def get_table_data(table_name, schema, idl):
