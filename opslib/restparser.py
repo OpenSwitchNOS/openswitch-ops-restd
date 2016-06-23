@@ -35,8 +35,6 @@ import ovs.db.idl
 # Global variables
 inflect_engine = inflect.engine()
 
-xml_tree = None
-
 # Schema constants
 OVSDB_SCHEMA_CONFIG = 'configuration'
 OVSDB_SCHEMA_STATS = 'statistics'
@@ -59,7 +57,9 @@ def normalizeName(name, to_plural=True):
     return(string.join(words, '_'))
 
 
-def extractColDesc(column_desc):
+def extractColDesc(column_desc, loadDesc):
+    if not loadDesc:
+        return ""
     if column_desc is None:
         column_desc = ""
     # Remove unecessary tags at the beginning of each description
@@ -76,7 +76,7 @@ def extractColDesc(column_desc):
 class OVSColumn(object):
     """__init__() functions as the class constructor"""
     def __init__(self, table, col_name, type_, is_optional=True,
-                 mutable=True, category=None):
+                 mutable=True, category=None, loadDesc=False):
         self.name = col_name
 
         # category type of this column
@@ -108,18 +108,16 @@ class OVSColumn(object):
         self.n_min = type_.n_min
 
         self.kvs = {}
-        self.desc = self.parse_xml_desc(table.name, col_name, self.kvs)
+        columnDesc = self.parse_xml_rec(table.name, col_name, self.kvs, loadDesc)
+        self.desc = extractColDesc(columnDesc, loadDesc)
 
     # Read the description for each column from XML source
-    def parse_xml_rec(self, node, xmlColumn, kvs):
+    def parse_xml_rec(self, tableName, xmlColumn, kvs, loadDesc):
         columnDesc = " "
-        for column in node.getchildren():
-            if column.tag == 'group':
-                columnDesc = self.parse_xml_rec(column, xmlColumn, kvs)
-            if (column.tag != 'column' or
-                    xmlColumn != column.attrib['name']):
-                continue
-
+        if (tableName, xmlColumn) not in xml_column_dict.keys():
+            return columnDesc
+        columns = xml_column_dict[(tableName, xmlColumn)]
+        for column in columns:
             if('keyname' in column.attrib):
                 self.keyname = column.attrib['keyname']
 
@@ -127,7 +125,6 @@ class OVSColumn(object):
                 columnDesc = ET.tostring(column, encoding='utf8',
                                          method='html')
                 continue
-
             # When an attribute is of type string in schema file,
             # it may have detailed structure information in its
             # companion XML description, otherwise the parent
@@ -155,17 +152,8 @@ class OVSColumn(object):
 
             key_desc = ET.tostring(column, encoding='utf8',
                                    method='html')
-            kvs[column.attrib['key']]['desc'] = extractColDesc(key_desc)
+            kvs[column.attrib['key']]['desc'] = extractColDesc(key_desc, loadDesc)
         return columnDesc
-
-    # Read the description for each column from XML source
-    def parse_xml_desc(self, xmlTable, xmlColumn, kvs):
-        columnDesc = ""
-        for node in xml_tree.iter():
-            if node.tag != 'table' or xmlTable != node.attrib['name']:
-                continue
-            columnDesc = self.parse_xml_rec(node, xmlColumn, kvs)
-            return extractColDesc(columnDesc)
 
     def process_type(self, base):
         type = base.type
@@ -351,7 +339,7 @@ class OVSTable(object):
         self.indexes = None
 
     @staticmethod
-    def from_json(json, name):
+    def from_json(json, name, loadDescription):
         parser = ovs.db.parser.Parser(json, "schema of table %s" % name)
         columns_json = parser.get("columns", [dict])
         mutable = parser.get_optional("mutable", [bool], True)
@@ -408,7 +396,8 @@ class OVSTable(object):
                                                                  type_,
                                                                  True,
                                                                  mutable,
-                                                                 category)
+                                                                 category,
+                                                                 loadDescription)
             elif relationship == "m:1":
                 table.references[column_name] = OVSReference(type_, "parent",
                                                              mutable, category)
@@ -421,15 +410,18 @@ class OVSTable(object):
             elif category == "configuration":
                 table.config[column_name] = OVSColumn(table, column_name,
                                                       type_, is_optional,
-                                                      mutable, category)
+                                                      mutable, category,
+                                                      loadDescription)
             elif category == "status":
                 table.status[column_name] = OVSColumn(table, column_name,
                                                       type_, is_optional,
-                                                      True, category)
+                                                      True, category,
+                                                      loadDescription)
             elif category == "statistics":
                 table.stats[column_name] = OVSColumn(table, column_name,
                                                      type_, is_optional,
-                                                     True, category)
+                                                     True, category,
+                                                     loadDescription)
             # Add to the array the name of the dynamic column
             if category.dynamic:
                 table.dynamic[column_name] = category
@@ -484,7 +476,7 @@ class RESTSchema(object):
             self.plural_name_map[table.plural_name] = table.name
 
     @staticmethod
-    def from_json(json):
+    def from_json(json, loadDescription):
         parser = ovs.db.parser.Parser(json, "extended OVSDB schema")
         name = parser.get("name", ['id'])
         version = parser.get_optional("version", [str, unicode])
@@ -498,7 +490,8 @@ class RESTSchema(object):
 
         tables = {}
         for tableName, tableJson in tablesJson.iteritems():
-            tables[tableName] = OVSTable.from_json(tableJson, tableName)
+            tables[tableName] = OVSTable.from_json(tableJson, tableName,
+                loadDescription)
 
         # Backfill the parent/child relationship info, mostly for
         # parent pointers which cannot be handled in place.
@@ -599,18 +592,45 @@ def _has_config_index(table, schema):
     # no indices or no index columns with category configuration
     return False
 
+def parse_columns(node, column):
+    if column.tag == 'column':
+        key = (node.attrib['name'], column.attrib['name'])
+        if key not in xml_column_dict:
+            xml_column_dict[key] = []
+        xml_column_dict[key].append(column)
 
-def parseSchema(schemaFile, title=None, version=None):
+    elif column.tag == 'group':
+        for group_column in column.getchildren():
+            if group_column.tag == 'group':
+                parse_columns(node, group_column)
+            elif group_column.tag != 'column':
+                continue
+            else:
+                key = (node.attrib['name'], group_column.attrib['name'])
+                if key not in xml_column_dict:
+                    xml_column_dict[key] = []
+                xml_column_dict[key].append(group_column)
+
+
+def parseSchema(schemaFile, title=None, version=None, loadDescription=False):
     # Initialize a global variable here
-    global xml_tree
+    global xml_column_dict
 
+
+    xml_column_dict={}
     # Assume the companion XML file and schema file differ only in extension
     # for their names (.extschema vs .xml)
     xmlFile = schemaFile[:-len("extschema")] + "xml"
     with open(xmlFile, 'rt') as f:
         xml_tree = ET.parse(f)
 
-    schema = RESTSchema.from_json(ovs.json.from_file(schemaFile))
+    for node in xml_tree.iter():
+        if node.tag != 'table':
+            continue
+        for column in node.getchildren():
+            parse_columns(node, column)
+
+    schema = RESTSchema.from_json(ovs.json.from_file(schemaFile), loadDescription)
 
     if title is None:
         title = schema.name
