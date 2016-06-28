@@ -630,16 +630,18 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
                     # TODO: check if this row exists in parent table
                     parent_rows = [parent_row]
                 else:
-                    parent_rows = idl.tables[parent].rows
+                    parent_rows = idl.tables[parent].rows.values()
 
-                for item in parent_rows.itervalues():
+                for item in parent_rows:
                     column_data = item.__getattr__(column_name)
 
                     if isinstance(column_data, types.ListType):
+                        count = 0
                         for ref in column_data:
-                            if ref.uuid == row:
-                                index = str(row.uuid)
+                            if ref == row:
+                                index = str(count)
                                 break
+                            count+=1
                     elif isinstance(column_data, types.DictType):
                         for key, value in column_data.iteritems():
                             if value == row:
@@ -658,19 +660,6 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
         index = '/'.join(tmp)
 
     return index
-
-'''
-# Old code
-def escaped_split(s_in):
-    strings = re.split(r'(?<!\\)/', s_in)
-    res_strings = []
-
-    for s in strings:
-        s = s.replace('\\/', '/')
-        res_strings.append(s)
-
-    return res_strings
-'''
 
 
 def escaped_split(s_in):
@@ -706,7 +695,6 @@ def get_reference_parent_uri(table_name, row, schema, idl):
     path = get_parent_trace(table_name, row, schema, idl)
 
     for table_name, indexes in path:
-        # Don't include Open_vSwitch table
         if table_name == OVSDB_SCHEMA_SYSTEM_TABLE:
             continue
 
@@ -983,3 +971,59 @@ def get_parent_child_col_and_relation(schema, parent_table, child_table):
                 return (column, OVSDB_SCHEMA_BACK_REFERENCE)
 
     return (None, None)
+
+def uri_from_row(row, table, schema, idl):
+
+    path = []
+    while row:
+        # top level table
+        if not schema.ovs_tables[table].parent:
+            index = row_to_index(row, table, schema, idl)
+            path = [index, schema.ovs_tables[table].plural_name]
+            table = 'System'
+        else:
+            parent_table = schema.ovs_tables[table].parent
+            parent_row = None
+            if table in schema.ovs_tables[parent_table].children:
+                # backward
+                for x, y in schema.ovs_tables[table].references.iteritems():
+                    if y.relation == 'parent':
+                        parent_row = row.__getattr__(x)
+                        break
+                index = row_to_index(row, table, schema, idl, parent_row)
+                path = path + [index, schema.ovs_tables[table].plural_name]
+            else:
+                # forward
+                for name, column in schema.ovs_tables[parent_table].references.iteritems():
+                    if column.relation == 'child' and column.ref_table == table:
+                        break
+
+                for item in idl.tables[parent_table].rows.itervalues():
+                    children = item.__getattr__(name)
+                    if isinstance(children, ovs.db.idl.Row):
+                        children = [children]
+                    elif isinstance(children, dict):
+                        children = children.values()
+
+                    if row in children:
+                        parent_row = item
+                        break
+
+                _max = column.n_max
+                if _max == 1:
+                    path = path + [name]
+                else:
+                    index = row_to_index(row, table, schema, idl, parent_row)
+                    path = path + [index, name]
+
+            row = parent_row
+            table = parent_table
+
+        if table == 'System':
+            path = path + ['system']
+            n = len(path)
+            uri = ''
+            while n:
+                uri = uri + '/' + str(path[n-1])
+                n-=1
+            return uri
