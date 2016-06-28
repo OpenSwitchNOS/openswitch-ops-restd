@@ -287,9 +287,9 @@ def get_column_json(column, row, table, schema, idl, uri,
         # Is a child table, is faster concatenate the uri instead searching
         elif column_table.parent == current_table.name:
             # If this is a child reference URI don't add the column path.
-            if column_table.plural_name not in uri:
+            if column not in uri:
                 uri = uri.rstrip('/')
-                uri += '/' + column_table.plural_name
+                uri += '/' + column
 
         if _kv_type:
             key_type = current_table.references[column].kv_key_type.name
