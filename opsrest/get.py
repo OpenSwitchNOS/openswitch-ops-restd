@@ -266,80 +266,53 @@ def get_table_json(table, schema, idl, uri, selector=None, depth=0):
 def get_column_json(column, row, table, schema, idl, uri,
                     selector=None, depth=0, depth_counter=0):
 
-    db_table = idl.tables[table]
-    db_row = db_table.rows[row]
-    db_col = db_row.__getattr__(column)
-    current_table = schema.ovs_tables[table]
-    _kv_type = current_table.references[column].kv_type
-    # Reference Column
-    col_table = current_table.references[column].ref_table
-    column_table = schema.ovs_tables[col_table]
+    reftable = schema.ovs_tables[table].references[column]
+    relation = schema.ovs_tables[table].references[column].relation
+    row = idl.tables[table].rows[row]
+    column_data = row.__getattr__(column)
 
-    if _kv_type:
-        resources_list = {}
-    else:
-        resources_list = []
-    # GET without depth
+    data = None
     if not depth:
-        # Is a top level table
-        if column_table.parent is None:
-            uri = _get_base_uri() + column_table.plural_name
-        # Is a child table, is faster concatenate the uri instead searching
-        elif column_table.parent == current_table.name:
-            # If this is a child reference URI don't add the column path.
-            if column_table.plural_name not in uri:
-                uri = uri.rstrip('/')
-                uri += '/' + column_table.plural_name
-
-        if _kv_type:
-            key_type = current_table.references[column].kv_key_type.name
-            for k, v in db_col.iteritems():
-                # Reference with different parent, search the parent
-                if column_table.parent is not None and \
-                        column_table.parent != current_table.name:
-                    uri = _get_base_uri()
-                    uri += utils.get_reference_parent_uri(col_table, v,
-                                                          schema, idl)
-                    uri += column_table.plural_name
-
-                # Set URI for key
-                tmp = utils.get_table_key(v, column_table.name, schema, idl)
-                # TODO: Support other types
-                if key_type == INTEGER:
-                    k = str(k)
-                _uri = _create_uri(uri, tmp)
-                resources_list.update({k: _uri})
-
-        else:
-            for value in db_col:
-                # Reference with different parent, search the parent
-                if column_table.parent is not None and \
-                        column_table.parent != current_table.name:
-                    uri = _get_base_uri()
-                    uri += utils.get_reference_parent_uri(col_table, value,
-                                                          schema, idl)
-                    uri += column_table.plural_name
-
-                # Set URI for key
-                tmp = utils.get_table_key(value, column_table.name, schema, idl)
-                _uri = _create_uri(uri, tmp)
-
-                resources_list.append(_uri)
+        if relation == 'reference':
+            if isinstance(column_data, ovs.db.idl.Row):
+                data = utils.row_to_uri(column_data, reftable, schema, idl)
+            elif isinstance(column_data, list):
+                data = []
+                for item in column_data:
+                    data.append(utils.row_to_uri(item, reftable, schema, idl))
+            elif isinstance(column_data, dict):
+                data = {}
+                for k, v in column_data.iteritems():
+                    data[k] = utils.row_to_uri(v, reftable, schema, idl)
+        elif relation == 'child':
+            if isinstance(column_data, ovs.db.idl.Row):
+                index = utils.row_to_index(column_data, reftable, schema, idl)
+                data = uri + '/' + str(index)
+            elif isinstance(column_data, list):
+                data = []
+                for item in column_data:
+                    index = utils.row_to_index(item, reftable, schema, idl)
+                    data.append(uri + '/' + str(index))
+            elif isinstance(column_data, dict):
+                data = {}
+                for k, v in column_data.iteritems():
+                    data[k] = uri + '/' + str(key)
     # GET with depth
     else:
-        if _kv_type:
-            for k, v in db_col.iteritems():
-                json_row = get_row_json(v.uuid, col_table, schema, idl, uri,
+        if isinstance(column_data, ovs.db.idl.Row):
+            data = get_row_json(column_data.uuid, reftable, schema, idl, uri,
+                                selector, depth, depth_counter)
+        elif isinstance(column_data, dict):
+            data = {}
+            for k, v in column_data.iteritems():
+                data[k] = get_row_json(v.uuid, reftable, schema, idl, uri,
                                         selector, depth, depth_counter)
-                resources_list.update({k: json_row})
-
-        else:
-            for value in db_col:
-                json_row = get_row_json(value.uuid, col_table, schema, idl, uri,
-                                        selector, depth, depth_counter)
-                resources_list.append(json_row)
-
-    return resources_list
+        elif isinstance(column_data, list):
+            data = []
+            for item in column_data:
+                data.append(get_row_json(item.uuid, reftable, schema, idl, uri,
+                                        selector, depth, depth_counter))
+    return data
 
 
 def _get_referenced_row(schema, table, row, column, column_row, idl):
