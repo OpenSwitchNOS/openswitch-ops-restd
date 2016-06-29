@@ -33,6 +33,7 @@
   - [Subscribe to multiple resources and modified](#subscribe-to-multiple-resources-and-modified)
 - [REST Selector validation](#rest-selector-validation)
 
+
 ## REST full declarative configuration
 ### Objective
 The objective of the test case is to verify if the user configuration is set in the OVSDB.
@@ -45,7 +46,6 @@ The requirements for this test case are:
 
 ### Setup
 #### Topology diagram
-
 ```ditaa
 +---------------+                 +---------------+
 |               |                 |    Ubuntu     |
