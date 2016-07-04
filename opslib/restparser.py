@@ -414,12 +414,18 @@ class OVSTable(object):
             keyname = parser.get_optional('keyname', [str, unicode])
 
             # Pre-process type, cleaning it up from OPS modifications
-            # (e.g. 'valueMap', adding back 'set' to the enum format)
+            # (e.g. 'valueMap', valueType, adding back 'set' to the
+            # enum format)
             _type = parser.get('type', [dict, str, unicode])
             convert_enums(_type)
             valueMap = {}
             if isinstance(_type, dict):
                 valueMap = _type.pop('valueMap', {})
+                if valueMap:
+                    _type['key'] = 'string'
+                    _type['value'] = _type.pop('valueType', 'string')
+
+            # Load OVS type from type dictionary
             _type = types.Type.from_json(_type)
 
             # Parse global description for the column
