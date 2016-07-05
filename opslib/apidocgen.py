@@ -1367,6 +1367,36 @@ def genFullConfigAPI(paths):
 
     ops["put"] = op
 
+    op = {}
+    op["summary"] = "Update full declarative configuration"
+    op["description"] = "Update full declarative configuration"
+    op["tags"] = ["FullConfiguration"]
+
+    params = []
+    param = {}
+    param["name"] = "type"
+    param["in"] = "query"
+    param["description"] = "select from running or startup, \
+                            default to running"
+    param["required"] = False
+    param["type"] = "string"
+    params.append(param)
+    param = {}
+    param["name"] = "data"
+    param["in"] = "body"
+    param["description"] = "declarative configuration"
+    param["required"] = True
+    param["schema"] = {'$ref': "#/definitions/SystemConfigFull"}
+    params.append(param)
+
+    op["parameters"] = params
+
+    responses = {}
+    addPatchResponse(responses)
+    op["responses"] = responses
+
+    ops["patch"] = op
+
     paths[path] = ops
 
 
