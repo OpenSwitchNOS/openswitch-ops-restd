@@ -31,7 +31,7 @@ NOT_LOCKED = Transaction.NOT_LOCKED
 ERROR = Transaction.ERROR
 
 # REST URIs
-REST_VERSION_PATH = '/rest/v1/'
+REST_VERSION_PATH = '/rest/v1'
 REST_LOGIN_PATH = '/login'
 REST_QUERY_PARAM_SELECTOR = 'selector'
 
