@@ -49,12 +49,25 @@ def delete_resource(resource, schema, txn, idl):
         raise DataValidationFailed(e.error)
 
     if resource.relation == OVSDB_SCHEMA_CHILD:
-
         if resource.next.row is None:
-            raise MethodNotAllowed
+            parent = idl.tables[resource.table].rows[resource.row]
+            rows = parent.__getattr__(resource.column)
+            if isinstance(rows, dict):
+                rows = rows.values()
+                parent.__setattr__(resource.column, {})
+            elif isinstance(rows, ovs.db.idl.Row):
+                rows = [rows]
+                parent.__setattr__(resource.column, None)
+            else:
+                parent.__setattr__(resource.column, [])
 
-        row = utils.delete_reference(resource.next, resource, schema, idl)
-        row.delete()
+            # delete rows from the table
+            while len(rows):
+                row = rows.pop()
+                row.delete()
+        else:
+            row = utils.delete_reference(resource.next, resource, schema, idl)
+            row.delete()
 
     elif resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
         row = utils.get_row_from_resource(resource.next, idl)
