@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# (c) Copyright 2015-2016 Hewlett Packard Enterprise Development LP
+# (c) Copyright 2015 Hewlett Packard Enterprise Development LP
 #
 # GNU Zebra is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -57,18 +57,29 @@ PORT_DATA = {
     "referenced_by": [{"uri": "/rest/v1/system/bridges/bridge_normal"}]
 }
 
-LOGIN_URI = '/login'
-ACCOUNT_URI = "/account"
+LOGIN_URI = '/rest/v1/login'
+ACCOUNT_URI = "/rest/v1/account"
 DEFAULT_USER = 'netop'
 DEFAULT_PASSWORD = 'netop'
 
 
+SSL_CFG_VERSION = 'ssl_version'
+SSL_CFG_VERIFY_MODE = 'verify_mode'
+SSL_CFG_CHECK_HOSTNAME = 'check_hostname'
+SSL_CFG_CA_CERTS = 'ca_certs'
+
+CERT_PATH = os.path.dirname(os.path.realpath(__file__))
+CERT_FILE = '/tmp/server.crt'
+SSL_CONFIG = {
+    SSL_CFG_VERSION: ssl.PROTOCOL_SSLv23,
+    SSL_CFG_VERIFY_MODE: ssl.CERT_REQUIRED,
+    SSL_CFG_CHECK_HOSTNAME: False,
+    SSL_CFG_CA_CERTS: CERT_FILE
+}
+
+
 def get_container_id(switch):
-    container_name = switch.testid + "_" + switch.name
-    container_id = subprocess.check_output(["docker", "ps", "-a",
-                                            "-q", "-f", "name=" +
-                                            container_name]).strip()
-    return container_id
+    return switch.container_id
 
 
 def get_switch_ip(switch):
@@ -107,6 +118,8 @@ def update_test_field(switch_ip, path, field, new_value, cookie_header=None):
                                                  xtra_header=cookie_header)
 
     assert status_code is http.client.OK
+    if isinstance(response_data, bytes):
+        response_data = response_data.decode("utf-8")
     assert response_data is not ""
 
     json_data = {}
@@ -127,6 +140,8 @@ def update_test_field(switch_ip, path, field, new_value, cookie_header=None):
                                                  json.dumps(port_print),
                                                  switch_ip,
                                                  xtra_header=cookie_header)
+    if isinstance(response_data, bytes):
+        response_data = response_data.decode("utf-8")
     assert status_code == http.client.OK
     assert response_data is ""
 
@@ -218,24 +233,28 @@ def execute_port_operations(data, port_name, http_method, operation_uri,
     return results
 
 
+def get_ssl_context():
+    ssl_context = ssl.SSLContext(SSL_CONFIG[SSL_CFG_VERSION])
+    ssl_context.verify_mode = SSL_CONFIG[SSL_CFG_VERIFY_MODE]
+    ssl_context.check_hostname = SSL_CONFIG[SSL_CFG_CHECK_HOSTNAME]
+    ssl_context.load_verify_locations(SSL_CONFIG[SSL_CFG_CA_CERTS])
+
+    return ssl_context
+
+
 def execute_request(path, http_method, data, ip, full_response=False,
                     xtra_header=None):
-
     url = path.replace(';', '&')
 
     headers = {"Content-type": "application/json", "Accept": "text/plain"}
     if xtra_header:
         headers.update(xtra_header)
 
-    sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    sslcontext.verify_mode = ssl.CERT_REQUIRED
-    sslcontext.check_hostname = False
-    src_path = os.path.dirname(os.path.realpath(__file__))
-    src_file = os.path.join(src_path, 'server.crt')
-    sslcontext.load_verify_locations(src_file)
-    conn = http.client.HTTPSConnection(ip, 443, context=sslcontext)
+    conn = http.client.HTTPSConnection(ip, 443,
+                                        context=get_ssl_context())
     time.sleep(2)
     conn.request(http_method, url, data, headers)
+
     response = conn.getresponse()
     status_code, response_data = response.status, response.read()
     conn.close()
@@ -370,9 +389,8 @@ def validate_keys_complete_object(json_data):
     return True
 
 
-def rest_sanity_check(switch_ip, cookie_header=None):
-    if cookie_header is None:
-        cookie_header = login(switch_ip)
+def rest_sanity_check(switch_ip):
+    cookie_header = login(switch_ip)
 
     print("Cookie Header" + str(cookie_header))
     print("\nSwitch Sanity Check: Verify if System table row and bridge_normal \
@@ -405,3 +423,32 @@ def rest_sanity_check(switch_ip, cookie_header=None):
         time.sleep(1)
 
     assert count <= max_retries
+
+
+def get_server_crt(switch):
+    container_id = switch.container_id   # get_container_id(switch)
+    print("\n Getting SSL cert from server container %s" % container_id)
+    max_ret = 15
+    count = 1
+    while count <= max_ret:
+        print("Try # " + str(count) + " to fetch SSL cert")
+        try:
+            subprocess.check_output(['docker', 'cp', container_id +
+                                 ':/etc/ssl/certs/server.crt',
+                                 '/tmp/server.crt'])
+            time.sleep(1)
+            if os.path.exists("/tmp/server.crt"):
+                print("SSL cert successfully fetched")
+                break
+        except subprocess.CalledProcessError:
+            print("Error in subprocess docker cp command\n")
+            pass
+        count +=1
+        time.sleep(1)
+
+def remove_server_crt():
+    crt_file = '/tmp/server.crt'
+    if os.path.exists(crt_file):
+        print('\n Removing the SSL cert')
+        os.remove(crt_file)
+    print('\n SSL cert successfuly removed')

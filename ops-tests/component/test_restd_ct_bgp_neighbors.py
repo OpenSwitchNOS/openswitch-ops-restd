@@ -19,8 +19,8 @@
 
 from pytest import fixture
 
-from rest_utils import (
-    execute_request, get_switch_ip,
+from rest_utils_ct import (
+    execute_request, get_switch_ip, get_server_crt, remove_server_crt,
     get_json, rest_sanity_check, login
 )
 
@@ -127,6 +127,7 @@ def setup(request, topology):
         SWITCH_IP = get_switch_ip(sw1)
     proxy = environ["https_proxy"]
     environ["https_proxy"] = ""
+    get_server_crt(sw1)
     if cookie_header is None:
         cookie_header = login(SWITCH_IP)
     post_setup()
@@ -135,15 +136,19 @@ def setup(request, topology):
         global cookie_header
         environ["https_proxy"] = proxy
         delete_teardown()
+        remove_server_crt()
         cookie_header = None
 
     request.addfinalizer(cleanup)
 
 
 @fixture(scope="module")
-def sanity_check():
+def sanity_check(topology):
+    sw1 = topology.get("sw1")
+    assert sw1 is not None
     sleep(2)
-    rest_sanity_check(SWITCH_IP, cookie_header)
+    get_server_crt(sw1)
+    rest_sanity_check(SWITCH_IP)
 
 
 def test_restd_bgp_neighbors_get_bgp_neighbors(setup, sanity_check,
