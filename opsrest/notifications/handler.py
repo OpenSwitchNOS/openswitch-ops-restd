@@ -114,6 +114,9 @@ class NotificationHandler():
             uris = get_collection_json(parent_resource, self._schema,
                                        idl, resource_uri, None, 0)
 
+            if isinstance(uris, dict):
+                uris = uris.values()
+
             rows_to_uri = dict(zip(row_uuids, uris))
 
             subscription = CollectionSubscription(resource.table,
@@ -132,14 +135,20 @@ class NotificationHandler():
         row_uuids = []
 
         if parent_resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
-            rows = parent_resource.next.row
-
-            if not isinstance(rows, list):
-                row_uuids.append(rows)
+            parent_row = idl.tables[parent_resource.table].rows[parent_resource.row]
+            parent_table = parent_resource.table
+            child_table = parent_resource.next.table
+            if parent_resource.next.row is None:
+                rows = utils.get_back_reference_children(parent_row, parent_table,
+                                                         child_table, self._schema, idl)
+                for row in rows:
+                    row_uuids.append(row.uuid)
             else:
-                row_uuids = rows
+                row_uuids.append(parent_resource.next.row)
+
         elif parent_resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
             row_uuids = idl.tables[parent_resource.next.table].rows.keys()
+
         else:
             rows = utils.get_column_data_from_resource(parent_resource,
                                                        idl)
