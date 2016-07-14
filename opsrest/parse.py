@@ -1,4 +1,4 @@
-# Copyright (C) 2015 Hewlett Packard Enterprise Development LP
+# Copyright (C) 2016 Hewlett Packard Enterprise Development LP
 #
 #  Licensed under the Apache License, Version 2.0 (the "License"); you may
 #  not use this file except in compliance with the License. You may obtain
@@ -79,166 +79,189 @@ def parse_url_path(path, schema, idl, http_method='GET'):
 
 
 def parse(path, resource, schema, idl, http_method):
-    '''
-        recursive routine that compares the URI path with the extended schema
-        and builds resource/subresource relationship. If the relationship
-        referenced by the URI doesn't match with the extended schema we
-        return None
-    '''
+
     if not path:
         return None
 
     ovs_tables = schema.ovs_tables
     table_names = ovs_tables.keys()
+    new_resource = None
 
-    _fail = False
-
-    # check if path[0] is a CHILD of resource.table
-    if path[0] in ovs_tables[resource.table].children:
+    # check if path[0] is a forward referenced child of resource.table
+    if path[0] in ovs_tables[resource.table].columns \
+            and path[0] in ovs_tables[resource.table].children:
 
         resource.relation = OVSDB_SCHEMA_CHILD
         resource.column = path[0]
+        _max = schema.ovs_tables[resource.table].references[resource.column].n_max
         app_log.debug("%s is a forward child in %s" % (path[0],
                       resource.table))
-        path[0] = ovs_tables[resource.table].references[path[0]].ref_table
 
+        child_table = ovs_tables[resource.table].references[resource.column].ref_table
+        new_resource = Resource(child_table, schema)
+        resource.next = new_resource
+
+        # index columns
+        indexes = ovs_tables[new_resource.table].indexes if \
+                ovs_tables[new_resource.table].indexes[0] != 'uuid' else None
+        path = path[1:]
+
+        if not path and _max > 1:
+            # done parsing uri
+            return
+
+        if _max == 1:
+            parent = idl.tables[resource.table].rows[resource.row]
+            child_row = parent.__getattr__(resource.column)
+            if not child_row and path:
+                raise Exception
+            elif not child_row and not path:
+                return
+            elif isinstance(child_row, list):
+                new_resource.row = child_row[0].uuid
+            elif isinstance(child_row, dict):
+                new_resource.row = child_row.values()[0].uuid
+                new_resource.index = child_row.keys()[0]
+
+        elif indexes:
+            if len(path) < len(indexes):
+                # not enough indices
+                raise Exception
+
+            index_list = path[0:len(indexes)]
+            row = verify_index(new_resource, resource, index_list, schema, idl)
+            if row is None:
+                # row with index doesn't exist
+                raise Exception
+
+            new_resource.row = row.uuid
+            new_resource.index = index_list
+            path = path[len(index_list):]
+
+        else:
+            # children are either an ordered list or a dict
+            parent = idl.tables[resource.table].rows[resource.row]
+            children = parent.__getattr__(resource.column)
+            if not children:
+                raise Exception
+
+            index = path[0]
+            if isinstance(children, dict):
+                column = schema.ovs_tables[resource.table].references[resource.column]
+                key_type = column.kv_key_type.name
+                if key_type  == 'integer':
+                    index = int(index)
+                elif key_type == 'uuid':
+                    raise Exception
+            else:
+                # ordered list
+                index = int(index)
+
+            try:
+                row = children[index]
+                new_resource.row = row.uuid
+                new_resource.index = index
+                path = path[1:]
+            except:
+                # not found
+                raise Exception
+
+    # top-level reference or back referenced child
     elif path[0] in schema.plural_name_map:
-
+        # check if path[0] is a back referenced child of resource.table
         path[0] = schema.plural_name_map[path[0]]
-
-        # check if path[0] is a back referenced CHILD of resource.table
         if path[0] in ovs_tables[resource.table].children:
             resource.relation = OVSDB_SCHEMA_BACK_REFERENCE
+            new_resource = Resource(path[0], schema)
+            resource.next = new_resource
             app_log.debug("%s is a backward child in %s"
                           % (path[0], resource.table))
-        else:
-            if resource.table == OVSDB_SCHEMA_SYSTEM_TABLE and \
-                    ovs_tables[path[0]].parent is None:
-                resource.relation = OVSDB_SCHEMA_TOP_LEVEL
-                app_log.debug("%s is a top level table" % (path[0]))
 
-    if resource.relation is None:
+        # or if path[0] is a top level table
+        elif resource.table == OVSDB_SCHEMA_SYSTEM_TABLE and \
+                ovs_tables[path[0]].parent is None:
+                    resource.relation = OVSDB_SCHEMA_TOP_LEVEL
+                    new_resource = Resource(path[0], schema)
+                    resource.next = new_resource
+                    app_log.debug("%s is a top level table" % (path[0]))
+
+        # do not proceed if relationship cannot be ascertained
+        if not resource.relation:
+            app_log.debug('URI not allowed: relationship does not exist')
+            raise Exception
+
+        indexes = ovs_tables[new_resource.table].indexes if \
+                ovs_tables[new_resource.table].indexes[0] != 'uuid' else None
+        path = path[1:]
+
+        # done processing URI
+        if not path:
+            return
+        # URI has an index to a resource
+        elif indexes:
+
+            if len(path) < len(indexes):
+                raise Exception
+
+            index_list = path[0:len(indexes)]
+            row = verify_index(new_resource, resource, index_list, schema, idl)
+            new_resource.row = row.uuid
+            new_resource.index = index_list
+            path = path[len(index_list):]
+
+    if not new_resource:
         app_log.debug('URI not allowed: relationship does not exist')
         raise Exception
 
-    # create the next resource
-    new_resource = Resource(path[0], schema)
-    resource.next = new_resource
-    path = path[1:]
-
-    # update path list
     app_log.debug("table: %s, row: %s, column: %s, relation: %s"
                   % (resource.table, str(resource.row),
                       str(resource.column), str(resource.relation)))
 
-    # this should be the start of the index
-    index_list = None
-    if path:
-        table_indices = schema.ovs_tables[new_resource.table].indexes
-
-        # len(path) must at least be equal to len(table_indices)
-        # to uniquely identify a resource
-        if len(path) < len(table_indices):
-            return None
-
-        index_list = path[0:len(table_indices)]
-
-    # verify back reference existence
-    if resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
-        if http_method == 'POST' and index_list is None:
-            return
-
-        if not verify_back_reference(resource, new_resource, schema,
-                                     idl, index_list):
-            app_log.debug('URI not allowed: resource verification failed')
-            raise Exception
-
-    # return if we are done processing the URI
-    if index_list is None:
-        return
-
-    # verify non-backreference resource existence
-    row = verify_index(new_resource, resource, index_list, schema, idl)
-    if row is None:
-        raise Exception
-    else:
-        new_resource.row = row.uuid
-        new_resource.index = index_list
-
-    # we now have a complete new_resource
     # continue processing the path further
-    path = path[len(index_list):]
     parse(path, new_resource, schema, idl, http_method)
 
 
-def verify_back_reference(resource, new_resource, schema,
-                          idl, index_list=None):
-    '''
-        Some resources have the same parent. BGP_Routers can share the same
-        VRF and hence will have the same reference pointer under the 'vrf'
-        column. If bgp_routers for a particular VRF is desired, we search
-        in the entire BGP_Router table to find those BGP Routers that have
-        the same VRF under the 'vrf' column and return a list of UUIDs
-        of those BGP_Router entries.
-    '''
-
-    if new_resource.table not in idl.tables:
-        return False
-
-    reference_keys = schema.ovs_tables[new_resource.table].references
-
-    _refCol = None
-    for key, value in reference_keys.iteritems():
-        if (value.relation == OVSDB_SCHEMA_PARENT and
-                value.ref_table == resource.table):
-            _refCol = key
-            break
-
-    if _refCol is None:
-        return False
-
-    # Look for back reference using the index
-    if index_list is not None:
-        row = verify_index(new_resource, None, index_list, schema, idl)
-        if row.__getattr__(_refCol).uuid == resource.row:
-            return True
-        else:
-            return False
-    else:
-        # Look for all resources that back reference the same parent
-        row_list = []
-        for item in idl.tables[new_resource.table].rows.itervalues():
-            reference = item.__getattr__(_refCol)
-
-            if reference.uuid == resource.row:
-                row_list.append(item.uuid)
-
-        new_resource.row = row_list
-        return True
-
-
 def verify_index(resource, parent, index_values, schema, idl):
-    '''
-        Verify if a resource exists in the DB Table using the index.
-    '''
 
     if resource.table not in idl.tables:
         return None
 
-    # check if we are dealing with key/value type of forward reference
-    kv_type = False
-    if parent is not None and parent.relation == OVSDB_SCHEMA_CHILD:
-        if schema.ovs_tables[parent.table].references[parent.column].kv_type:
-            kv_type = True
+    if parent.relation == OVSDB_SCHEMA_BACK_REFERENCE:
+        reference_keys = schema.ovs_tables[resource.table].references
 
-    if kv_type:
-        # check in parent table that the index exists
-        app_log.debug('verifying key/value type reference')
-        row = utils.kv_index_to_row(index_values, parent, idl)
-    else:
+        _refCol = None
+        for key, value in reference_keys.iteritems():
+            if (value.relation == OVSDB_SCHEMA_PARENT and
+                    value.ref_table == parent.table):
+                _refCol = key
+                break
+
+        if _refCol is None:
+            return False
+
+        dbtable = idl.tables[resource.table]
+        row = utils.index_to_row(index_list, schema.ovs_tables[resource.table], idl)
+        if row.__getattr__(_refCol).uuid == parent.row:
+            return row
+        else:
+            return None
+
+    elif parent.relation == OVSDB_SCHEMA_TOP_LEVEL:
         dbtable = idl.tables[resource.table]
         table_schema = schema.ovs_tables[resource.table]
-
         row = utils.index_to_row(index_values, table_schema, dbtable)
+        return row
 
-    return row
+    else:
+        # check if we are dealing with key/value type of forward reference
+        kv_type = schema.ovs_tables[parent.table].references[parent.column].kv_type
+
+        if kv_type:
+            # check in parent table that the index exists
+            app_log.debug('verifying key/value type reference')
+            row = utils.kv_index_to_row(index_values, parent, idl)
+        else:
+            dbtable = idl.tables[resource.table]
+            table_schema = schema.ovs_tables[resource.table]
+            row = utils.index_to_row(index_values, table_schema, dbtable)
+        return row
