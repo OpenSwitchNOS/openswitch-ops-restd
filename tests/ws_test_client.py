@@ -65,10 +65,9 @@ def get_cmd_args(cmd_args):
 def get_ssl_opts(docker_container):
     get_server_crt(docker_container)
 
-    sslopt = {"cert_reqs": ssl.CERT_REQUIRED,
+    sslopt = {
               "ca_certs": SSL_CERT_TMP,
-              "ssl_version": ssl.PROTOCOL_SSLv23,
-              "check_hostname": False}
+              "ssl_version": ssl.PROTOCOL_SSLv23}
 
     return sslopt
 
