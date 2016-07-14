@@ -27,6 +27,7 @@ class ValidatorAdapter(object):
                                   ops.constants.REQUEST_TYPE_UPDATE: [],
                                   ops.constants.REQUEST_TYPE_DELETE: []}
         self.errors = []
+        validator.init_plugins(ops.constants.OPSPLUGIN_DIR)
 
     def has_errors(self):
         return len(self.errors) > 0
