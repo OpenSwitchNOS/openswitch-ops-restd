@@ -194,12 +194,12 @@ def delete_reference(resource, parent, schema, idl):
     ref = None
     if schema.ovs_tables[parent.table].references[parent.column].kv_type:
         app_log.debug('Deleting KV type reference')
-        key = resource.index[0]
+        key = resource.index
         parent_row = idl.tables[parent.table].rows[parent.row]
         kv_references = get_column_data_from_row(parent_row, parent.column)
         updated_kv_references = {}
         for k, v in kv_references.iteritems():
-            if str(k) == key:
+            if k == key:
                 ref = v
             else:
                 updated_kv_references[k] = v
@@ -630,16 +630,18 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
                     # TODO: check if this row exists in parent table
                     parent_rows = [parent_row]
                 else:
-                    parent_rows = idl.tables[parent].rows
+                    parent_rows = idl.tables[parent].rows.values()
 
-                for item in parent_rows.itervalues():
+                for item in parent_rows:
                     column_data = item.__getattr__(column_name)
 
                     if isinstance(column_data, types.ListType):
+                        count = 0
                         for ref in column_data:
-                            if ref.uuid == row:
-                                index = str(row.uuid)
+                            if ref == row:
+                                index = str(count)
                                 break
+                            count+=1
                     elif isinstance(column_data, types.DictType):
                         for key, value in column_data.iteritems():
                             if value == row:
@@ -658,19 +660,6 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
         index = '/'.join(tmp)
 
     return index
-
-'''
-# Old code
-def escaped_split(s_in):
-    strings = re.split(r'(?<!\\)/', s_in)
-    res_strings = []
-
-    for s in strings:
-        s = s.replace('\\/', '/')
-        res_strings.append(s)
-
-    return res_strings
-'''
 
 
 def escaped_split(s_in):
@@ -706,7 +695,6 @@ def get_reference_parent_uri(table_name, row, schema, idl):
     path = get_parent_trace(table_name, row, schema, idl)
 
     for table_name, indexes in path:
-        # Don't include Open_vSwitch table
         if table_name == OVSDB_SCHEMA_SYSTEM_TABLE:
             continue
 
@@ -837,10 +825,19 @@ def exec_validators_with_resource(idl, schema, resource, http_method):
         child_resource = resource.next
 
     table_name = child_resource.table
-    row = idl.tables[table_name].rows[child_resource.row]
-
-    validator.exec_validators(idl, schema, table_name, row, http_method,
-                              p_table_name, p_row)
+    if child_resource.row is None and resource.relation == 'child':
+        children = p_row.__getattr__(resource.column)
+        if isinstance(children, ovs.db.idl.Row):
+            children = [children]
+        elif isinstance(children, dict):
+            children = children.values()
+        for row in children:
+            validator.exec_validators(idl, schema, table_name, row, http_method,
+                                      p_table_name, p_row)
+    else:
+        row = idl.tables[table_name].rows[child_resource.row]
+        validator.exec_validators(idl, schema, table_name, row, http_method,
+                                  p_table_name, p_row)
 
 
 def redirect_http_to_https(current_instance):
@@ -983,3 +980,56 @@ def get_parent_child_col_and_relation(schema, parent_table, child_table):
                 return (column, OVSDB_SCHEMA_BACK_REFERENCE)
 
     return (None, None)
+
+def row_to_uri(row, table, schema, idl):
+
+    path = []
+    while row:
+        # top level table
+        if not schema.ovs_tables[table].parent:
+            index = str(row_to_index(row, table, schema, idl))
+            path = [index, schema.ovs_tables[table].plural_name]
+            table = OVSDB_SCHEMA_SYSTEM_TABLE
+        else:
+            parent_table = schema.ovs_tables[table].parent
+            parent_row = None
+            if table in schema.ovs_tables[parent_table].children:
+                # backward
+                for x, y in schema.ovs_tables[table].references.iteritems():
+                    if y.relation == OVSDB_SCHEMA_PARENT:
+                        parent_row = row.__getattr__(x)
+                        break
+                index = str(row_to_index(row, table, schema, idl, parent_row))
+                path = path + [index, schema.ovs_tables[table].plural_name]
+            else:
+                # forward
+                for name, column in schema.ovs_tables[parent_table].references.iteritems():
+                    if column.relation == OVSDB_SCHEMA_CHILD and column.ref_table == table:
+                        break
+
+                for item in idl.tables[parent_table].rows.itervalues():
+                    children = item.__getattr__(name)
+                    if isinstance(children, ovs.db.idl.Row):
+                        children = [children]
+                    elif isinstance(children, dict):
+                        children = children.values()
+
+                    if row in children:
+                        parent_row = item
+                        break
+
+                _max = column.n_max
+                if _max == 1:
+                    path = path + [name]
+                else:
+                    index = str(row_to_index(row, table, schema, idl, parent_row))
+                    path = path + [index, name]
+
+            row = parent_row
+            table = parent_table
+
+        if table == OVSDB_SCHEMA_SYSTEM_TABLE:
+            path = path + [OVSDB_SCHEMA_SYSTEM_URI]
+        path.reverse()
+        uri = REST_VERSION_PATH + '/'.join(path)
+        return uri
