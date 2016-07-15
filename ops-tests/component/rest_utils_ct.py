@@ -433,7 +433,10 @@ def get_server_crt(switch):
     while count <= max_ret:
         print("Try # " + str(count) + " to fetch SSL cert")
         try:
-            subprocess.check_output(['scp', 'root@' + get_switch_ip(switch) +
+            subprocess.check_output(['scp', '-o',
+                'UserKnownHostsFile=/dev/null',
+                '-o', 'StrictHostKeyChecking=no',
+                'root@' + get_switch_ip(switch) +
                                  ':/etc/ssl/certs/server.crt',
                                  '/tmp/server.crt'])
             time.sleep(1)
