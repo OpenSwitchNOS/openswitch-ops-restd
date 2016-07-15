@@ -45,7 +45,6 @@ The requirements for this test case are:
 
 ### Setup
 #### Topology diagram
-
 ```ditaa
 +---------------+                 +---------------+
 |               |                 |    Ubuntu     |
