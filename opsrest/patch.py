@@ -26,8 +26,10 @@ import jsonpatch
 from jsonpointer import JsonPointerException
 from tornado.log import app_log
 from copy import deepcopy
+from tornado import gen
 
 
+@gen.coroutine
 def patch_resource(data, resource, schema, txn, idl, uri):
 
     # Allow PATCH operation on System table
@@ -61,7 +63,7 @@ def patch_resource(data, resource, schema, txn, idl, uri):
     (patch, needs_update) = create_patch(data)
 
     # Get the JSON to patch
-    row_json = get_current_row(resource_update, uri, schema, idl)
+    row_json = yield get_current_row(resource_update, uri, schema, idl)
 
     # Now apply the patch to that JSON
     patched_row_json = apply_patch(patch, row_json, resource_update, schema)
@@ -95,7 +97,7 @@ def patch_resource(data, resource, schema, txn, idl, uri):
             raise DataValidationFailed(e.error)
 
     result = txn.commit()
-    return OvsdbTransactionResult(result)
+    raise gen.Return(OvsdbTransactionResult(result))
 
 
 def create_patch(data):
@@ -164,18 +166,20 @@ def create_patch(data):
     return (patch, modified)
 
 
+@gen.coroutine
 def get_current_row(resource_update, uri, schema, idl):
 
     # Get a JSON representation of the row to patch
     uri = get._get_uri(resource_update, schema, uri)
-    row_json = get.get_row_json(resource_update.row, resource_update.table,
-                                schema, idl, uri, OVSDB_SCHEMA_CONFIG,
-                                with_empty_values=True)
+    row_json = yield get.get_row_json(resource_update.row,
+                                      resource_update.table,
+                                      schema, idl, uri, OVSDB_SCHEMA_CONFIG,
+                                      with_empty_values=True)
     row_json = row_json[OVSDB_SCHEMA_CONFIG]
 
     app_log.debug("Pre-patch row_json -> %s" % row_json)
 
-    return row_json
+    raise gen.Return(row_json)
 
 
 def apply_patch(patch, row_json, resource_update=None, schema=None):

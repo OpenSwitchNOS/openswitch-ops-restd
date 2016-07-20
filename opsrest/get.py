@@ -16,23 +16,30 @@ from opsrest.constants import *
 from opsrest.utils import utils
 from opsrest.utils import getutils
 from opsrest import verify
+from opsrest.exceptions import (
+    InternalError,
+    TransactionFailed
+)
 
 import httplib
 import types
 
 from tornado.log import app_log
+from tornado import gen
 
 
+@gen.coroutine
 def get_resource(idl, resource, schema, uri=None,
-                 selector=None, query_arguments=None):
+                 selector=None, query_arguments=None,
+                 fetch_readonly=False, manager=None):
 
     depth = getutils.get_depth_param(query_arguments)
 
     if isinstance(depth, dict) and ERROR in depth:
-        return depth
+        raise gen.Return(depth)
 
     if resource is None:
-        return None
+        raise gen.Return(None)
 
     # We want to get System table
     if resource.next is None:
@@ -56,20 +63,32 @@ def get_resource(idl, resource, schema, uri=None,
                 getutils.validate_non_plural_query_args(query_arguments)
 
             if ERROR in validation_result:
-                return validation_result
+                raise gen.Return(validation_result)
 
-        return get_row_json(resource.row, resource.table, schema,
-                            idl, uri, selector, depth)
+        # Fetch all read-only columns prior to retrieving row data
+        if fetch_readonly and manager:
+            row = idl.tables[resource.table].rows[resource.row]
+            yield utils.fetch_readonly_columns(schema, resource.table,
+                                               idl, manager, [row])
+
+        result = yield get_row_json(resource.row, resource.table, schema,
+                                    idl, uri, selector, depth,
+                                    fetch_readonly=fetch_readonly,
+                                    manager=manager)
+        raise gen.Return(result)
     else:
         # Other tables
-        return get_resource_from_db(resource, schema, idl, uri,
-                                    selector, query_arguments, depth)
+        result = yield get_resource_from_db(resource, schema, idl, uri,
+                                            selector, query_arguments, depth,
+                                            fetch_readonly, manager)
+        raise gen.Return(result)
 
 
 # get resource from db using resource->next_resource pair
+@gen.coroutine
 def get_resource_from_db(resource, schema, idl, uri=None,
                          selector=None, query_arguments=None,
-                         depth=0):
+                         depth=0, fetch_readonly=False, manager=None):
 
     resource_result = None
     uri = _get_uri(resource, schema, uri)
@@ -93,7 +112,7 @@ def get_resource_from_db(resource, schema, idl, uri=None,
                                                      schema, resource.next,
                                                      depth, is_collection)
     if ERROR in validation_result:
-        return validation_result
+        raise gen.Return(validation_result)
 
     if REST_QUERY_PARAM_OFFSET in pagination_args:
         offset = pagination_args[REST_QUERY_PARAM_OFFSET]
@@ -108,11 +127,23 @@ def get_resource_from_db(resource, schema, idl, uri=None,
 
     # Get the resource result according to result type
     if is_collection:
-        resource_result = get_collection_json(resource, schema, idl, uri,
-                                              selector, depth)
+        resource_result = yield get_collection_json(resource, schema, idl, uri,
+                                                    selector, depth,
+                                                    fetch_readonly,
+                                                    manager)
     else:
-        resource_result = get_row_json(resource.next.row, resource.next.table,
-                                       schema, idl, uri, selector, depth)
+        # Fetch all read-only columns prior to retrieving row data
+        if fetch_readonly and manager:
+            row = idl.tables[resource.next.table].rows[resource.next.row]
+            yield utils.fetch_readonly_columns(schema,
+                                               resource.next.table,
+                                               idl, manager, [row])
+
+        resource_result = yield get_row_json(resource.next.row,
+                                             resource.next.table,
+                                             schema, idl, uri, selector, depth,
+                                             fetch_readonly=fetch_readonly,
+                                             manager=manager)
 
     # Post process data if it necessary
     if (resource_result and depth and isinstance(resource_result, list)):
@@ -124,31 +155,41 @@ def get_resource_from_db(resource, schema, idl, uri=None,
                                                          schema, table,
                                                          categorized=True)
 
-    return resource_result
+    raise gen.Return(resource_result)
 
 
-def get_collection_json(resource, schema, idl, uri, selector, depth):
+@gen.coroutine
+def get_collection_json(resource, schema, idl, uri, selector, depth,
+                        fetch_readonly=False, manager=None):
 
     if resource.relation is OVSDB_SCHEMA_TOP_LEVEL:
-        resource_result = get_table_json(resource.next.table, schema, idl, uri,
-                                         selector, depth)
+        resource_result = yield get_table_json(resource.next.table, schema,
+                                               idl, uri, selector, depth,
+                                               fetch_readonly, manager)
 
     elif resource.relation is OVSDB_SCHEMA_CHILD:
-        resource_result = get_column_json(resource.column, resource.row,
-                                          resource.table, schema, idl, uri,
-                                          selector, depth)
+        resource_result = yield get_column_json(resource.column, resource.row,
+                                                resource.table, schema, idl,
+                                                uri, selector, depth,
+                                                fetch_readonly=fetch_readonly,
+                                                manager=manager)
 
     elif resource.relation is OVSDB_SCHEMA_BACK_REFERENCE:
-        resource_result = get_back_references_json(resource.row,
-                                                   resource.table,
-                                                   resource.next.table, schema,
-                                                   idl, uri, selector, depth)
+        resource_result = yield get_back_references_json(resource.row,
+                                                         resource.table,
+                                                         resource.next.table,
+                                                         schema, idl, uri,
+                                                         selector, depth,
+                                                         fetch_readonly,
+                                                         manager)
 
-    return resource_result
+    raise gen.Return(resource_result)
 
 
+@gen.coroutine
 def get_row_json(row, table, schema, idl, uri, selector=None,
-                 depth=0, depth_counter=0, with_empty_values=False):
+                 depth=0, depth_counter=0, with_empty_values=False,
+                 fetch_readonly=False, manager=None):
 
     depth_counter += 1
     db_table = idl.tables[table]
@@ -211,9 +252,9 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
         if (depth_counter >= depth):
             depth = 0
 
-        temp = get_column_json(key, row, table, schema,
-                               idl, uri, selector, depth,
-                               depth_counter)
+        temp = yield get_column_json(key, row, table, schema,
+                                     idl, uri, selector, depth,
+                                     depth_counter, fetch_readonly, manager)
 
         # The condition below is used to discard the empty list of references
         # in the data returned for get requests
@@ -239,11 +280,13 @@ def get_row_json(row, table, schema, idl, uri, selector=None,
     data = getutils._categorize_by_selector(config_data, stats_data,
                                             status_data, selector)
 
-    return data
+    raise gen.Return(data)
 
 
 # get list of all table row entries
-def get_table_json(table, schema, idl, uri, selector=None, depth=0):
+@gen.coroutine
+def get_table_json(table, schema, idl, uri, selector=None, depth=0,
+                   fetch_readonly=False, manager=None):
 
     db_table = idl.tables[table]
 
@@ -255,22 +298,33 @@ def get_table_json(table, schema, idl, uri, selector=None, depth=0):
             _uri = _create_uri(uri, tmp)
             resources_list.append(_uri)
     else:
+        # Fetch all read-only columns prior to retrieving row data
+        if fetch_readonly and manager:
+            yield utils.fetch_readonly_columns_for_table(schema,
+                                                         table, idl,
+                                                         manager)
+
         for row in db_table.rows.itervalues():
-            json_row = get_row_json(row.uuid, table, schema, idl, uri,
-                                    selector, depth)
+            json_row = yield get_row_json(row.uuid, table, schema, idl, uri,
+                                          selector, depth,
+                                          fetch_readonly=fetch_readonly,
+                                          manager=manager)
             resources_list.append(json_row)
 
-    return resources_list
+    raise gen.Return(resources_list)
 
 
+@gen.coroutine
 def get_column_json(column, row, table, schema, idl, uri,
-                    selector=None, depth=0, depth_counter=0):
+                    selector=None, depth=0, depth_counter=0,
+                    fetch_readonly=False, manager=None):
 
     db_table = idl.tables[table]
     db_row = db_table.rows[row]
     db_col = db_row.__getattr__(column)
     current_table = schema.ovs_tables[table]
     _kv_type = current_table.references[column].kv_type
+
     # Reference Column
     col_table = current_table.references[column].ref_table
     column_table = schema.ovs_tables[col_table]
@@ -279,6 +333,7 @@ def get_column_json(column, row, table, schema, idl, uri,
         resources_list = {}
     else:
         resources_list = []
+
     # GET without depth
     if not depth:
         # Is a top level table
@@ -327,19 +382,30 @@ def get_column_json(column, row, table, schema, idl, uri,
                 resources_list.append(_uri)
     # GET with depth
     else:
+        ref_rows = []
         if _kv_type:
-            for k, v in db_col.iteritems():
-                json_row = get_row_json(v.uuid, col_table, schema, idl, uri,
-                                        selector, depth, depth_counter)
-                resources_list.update({k: json_row})
-
+            ref_rows = db_col.values()
+            ref_keys = db_col.keys()
         else:
-            for value in db_col:
-                json_row = get_row_json(value.uuid, col_table, schema, idl, uri,
-                                        selector, depth, depth_counter)
+            ref_rows = db_col
+
+        # Fetch all read-only columns prior to retrieving row data
+        if fetch_readonly and manager:
+            yield utils.fetch_readonly_columns(schema, table, idl,
+                                               manager, ref_rows)
+
+        for index, ref_row in enumerate(ref_rows):
+            json_row = yield get_row_json(ref_row.uuid, col_table, schema, idl,
+                                          uri, selector, depth, depth_counter,
+                                          fetch_readonly=fetch_readonly,
+                                          manager=manager)
+
+            if _kv_type:
+                resources_list.update({ref_keys[index]: json_row})
+            else:
                 resources_list.append(json_row)
 
-    return resources_list
+    raise gen.Return(resources_list)
 
 
 def _get_referenced_row(schema, table, row, column, column_row, idl):
@@ -356,9 +422,11 @@ def _get_referenced_row(schema, table, row, column, column_row, idl):
         return column_row
 
 
+@gen.coroutine
 def get_back_references_json(parent_row, parent_table, table,
                              schema, idl, uri, selector=None,
-                             depth=0):
+                             depth=0, fetch_readonly=False,
+                             manager=None):
 
     references = schema.ovs_tables[table].references
     _refCol = None
@@ -369,7 +437,7 @@ def get_back_references_json(parent_row, parent_table, table,
             break
 
     if _refCol is None:
-        return None
+        raise gen.Return(None)
 
     resources_list = []
 
@@ -381,14 +449,25 @@ def get_back_references_json(parent_row, parent_table, table,
                 _uri = _create_uri(uri, tmp)
                 resources_list.append(_uri)
     else:
+        # Fetch all read-only columns prior to retrieving row data
+        rows = []
         for row in idl.tables[table].rows.itervalues():
             ref = row.__getattr__(_refCol)
             if ref.uuid == parent_row:
-                json_row = get_row_json(row.uuid, table, schema, idl, uri,
-                                        selector, depth)
-                resources_list.append(json_row)
+                rows.append(row)
 
-    return resources_list
+        if fetch_readonly and manager:
+            yield utils.fetch_readonly_columns(schema, table, idl,
+                                               manager, rows)
+
+        for row in rows:
+            json_row = yield get_row_json(row.uuid, table, schema, idl, uri,
+                                          selector, depth,
+                                          fetch_readonly=fetch_readonly,
+                                          manager=manager)
+            resources_list.append(json_row)
+
+    raise gen.Return(resources_list)
 
 
 def _get_base_uri():
