@@ -21,6 +21,7 @@ import ops_diagdump
 import ovs.vlog
 import argparse
 import subprocess
+import sys
 import os
 from tempfile import mkstemp
 
@@ -113,6 +114,11 @@ class UnixctlManager:
 def main():
     global app, HTTPS_server, HTTP_server
 
+    # TODO: Using two arg parsers is a mess. Right now users are required
+    # to do "restd --help" for tornado options and "rest -- --help" for
+    # restd options. This should be changed to use either tornado's options
+    # *or* argparser (or equiv.).
+    sys.argv = [sys.argv[0], ] + options.parse_command_line()
     options.parse_command_line()
     parser = argparse.ArgumentParser()
     ovs.vlog.add_args(parser)
