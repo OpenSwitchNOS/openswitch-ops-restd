@@ -26,6 +26,7 @@ from opsvalidator import validator
 from tornado.log import app_log
 from copy import deepcopy
 from opsrest.exceptions import DataValidationFailed
+from tornado.options import options
 
 
 def get_row_from_resource(resource, idl):
@@ -845,6 +846,9 @@ def exec_validators_with_resource(idl, schema, resource, http_method):
 
 
 def redirect_http_to_https(current_instance):
+    if not options.force_https:
+        return True
+
     if current_instance.request.protocol == HTTP:
         current_instance.redirect(re.sub(r'^([^:]+)', HTTPS,
                                   current_instance.request.full_url()), True)
