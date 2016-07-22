@@ -17,10 +17,13 @@ import custom
 
 from tornado.options import define
 
+define("HTTPS", default=True, help="turn on serving HTTPS")
 define("HTTPS_port", default=443, help="run on the given port", type=int)
 define("HTTP_port", default=80, help="run on the given port", type=int)
+define("listen", default="", help="listen only on the specified address")
 define("config", default=None, help="tornado config file")
 define("debug", default=False, help="debug mode")
+define("create_ssl", default=True, help="create SSL certificate if needed")
 define("force_https", default=True,
        help="causes all HTTP connections to be redirected to HTTPS")
 

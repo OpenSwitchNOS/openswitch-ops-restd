@@ -128,19 +128,21 @@ def main():
     app_log.debug("Creating OVSDB API Application!")
     app = OvsdbApiApplication(settings)
 
-    create_ssl_pki()
-
-    HTTPS_server = tornado.httpserver.HTTPServer(app, ssl_options={
-        "certfile": SSL_CRT_FILE,
-        "keyfile": SSL_PRIV_KEY_FILE})
+    if options.create_ssl:
+        create_ssl_pki()
 
     HTTP_server = tornado.httpserver.HTTPServer(app)
+    app_log.debug("Server listening on: [%s]:%s" % (
+        options.listen, options.HTTP_port))
+    HTTP_server.listen(options.HTTP_port, options.listen)
 
-    app_log.debug("Server listening to port: %s" % options.HTTPS_port)
-    HTTPS_server.listen(options.HTTPS_port)
-
-    app_log.debug("Server listening to port: %s" % options.HTTP_port)
-    HTTP_server.listen(options.HTTP_port)
+    if options.HTTPS:
+        HTTPS_server = tornado.httpserver.HTTPServer(app, ssl_options={
+            "certfile": SSL_CRT_FILE,
+            "keyfile": SSL_PRIV_KEY_FILE})
+        app_log.debug("Server listening on: [%s]:%s" % (
+            options.listen, options.HTTPS_port))
+        HTTPS_server.listen(options.HTTPS_port, options.listen)
 
     unixmgr = UnixctlManager()
     unixmgr.start()
