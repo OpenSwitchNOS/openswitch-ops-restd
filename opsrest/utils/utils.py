@@ -27,6 +27,8 @@ from tornado.log import app_log
 from copy import deepcopy
 from opsrest.exceptions import DataValidationFailed
 from tornado.options import options
+from tornado import gen
+from opslib.restparser import ON_DEMAND_FETCHED_TABLES
 
 
 def get_row_from_resource(resource, idl):
@@ -1070,3 +1072,53 @@ def get_back_reference_children(parent, parent_table, child_table, schema, idl):
         if row.__getattr__(refcol) == parent:
             children.append(row)
     return children
+
+@gen.coroutine
+def fetch_readonly_columns(schema, table, idl, manager, rows):
+    """
+    Fetches the columns that were registered as read-only from the DB.
+    The method utilizes commit_block. Top-level caller should invoke this
+    in a coroutine.
+    """
+    if table in ON_DEMAND_FETCHED_TABLES:
+        app_log.debug("Fetching read-only columns..")
+        table_schema = schema.ovs_tables[table]
+        txn = manager.get_new_transaction()
+
+        for row in rows:
+            for column in table_schema.readonly_columns:
+                row.fetch(column)
+
+        status = txn.commit()
+        if status == INCOMPLETE:
+            manager.monitor_transaction(txn)
+            yield txn.event.wait()
+            status = txn.status
+
+        app_log.debug("Fetching status: %s" % status)
+
+
+@gen.coroutine
+def fetch_readonly_columns_for_table(schema, table, idl, manager):
+    """
+    Fetches the columns that were registered as read-only from the DB
+    for all rows in the table.
+
+    The method utilizes commit_block. Top-level caller should invoke this
+    in a coroutine.
+    """
+    if table in ON_DEMAND_FETCHED_TABLES:
+        app_log.debug("Fetching read-only columns for table..")
+        table_schema = schema.ovs_tables[table]
+        txn = manager.get_new_transaction()
+
+        for column in table_schema.readonly_columns:
+            txn.txn.fetch_table(table, column)
+
+        status = txn.commit()
+        if status == INCOMPLETE:
+            manager.monitor_transaction(txn)
+            yield txn.event.wait()
+            status = txn.status
+
+        app_log.debug("Fetching status: %s" % status)

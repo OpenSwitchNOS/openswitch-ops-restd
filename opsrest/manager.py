@@ -27,13 +27,15 @@ from opsrest.constants import (
     OVSDB_DEFAULT_CONNECTION_TIMEOUT,
     INCOMPLETE
 )
+from opslib.restparser import ON_DEMAND_FETCHED_TABLES
 
 
 class OvsdbConnectionManager:
-    def __init__(self, remote, schema, *args, **kwargs):
+    def __init__(self, remote, schema, rest_schema, *args, **kwargs):
         self.timeout = OVSDB_DEFAULT_CONNECTION_TIMEOUT
         self.remote = remote
         self.schema = schema
+        self.rest_schema = rest_schema
         self.schema_helper = None
         self.idl = None
         self.transactions = None
@@ -46,6 +48,7 @@ class OvsdbConnectionManager:
         self.ovs_socket = None
         self.register_tables = None
         self.track_all = False
+        self.txn_timeout_handle = None
 
     def start(self, register_tables=None, track_all=False):
         try:
@@ -65,7 +68,8 @@ class OvsdbConnectionManager:
                 self.track_all = track_all
 
             if not self.register_tables:
-                self.schema_helper.register_all()
+                self.register_schema_helper_columns(self.schema_helper,
+                                                    self.rest_schema)
             else:
                 for table in self.register_tables:
                     self.schema_helper.register_table(str(table))
@@ -97,6 +101,8 @@ class OvsdbConnectionManager:
         if self.timeout_handle:
             IOLoop.current().remove_timeout(self.timeout_handle)
             self.timeout_handle = None
+
+        self.stop_transaction_timer()
 
         if self.idl:
             self.idl.close()
@@ -172,18 +178,38 @@ class OvsdbConnectionManager:
             self.idl_check_and_update()
 
     def check_transactions(self):
+        self.stop_transaction_timer()
+        txn_incomplete = False
+
         for index, tx in enumerate(self.transactions.txn_list):
             tx.commit()
             # TODO: Handle all states
             if tx.status is not INCOMPLETE:
                 self.transactions.txn_list.pop(index)
                 tx.event.set()
+            else:
+                txn_incomplete = True
+
+        if txn_incomplete:
+            self.start_transaction_timer()
 
     def get_new_transaction(self):
         return OvsdbTransaction(self.idl)
 
     def monitor_transaction(self, txn):
         self.transactions.add_txn(txn)
+        self.start_transaction_timer()
+
+    def stop_transaction_timer(self):
+        if self.txn_timeout_handle:
+            IOLoop.current().remove_timeout(self.txn_timeout_handle)
+            self.txn_timeout_handle = None
+
+    def start_transaction_timer(self):
+        if not self.txn_timeout_handle:
+            self.txn_timeout_handle = \
+                IOLoop.current().add_timeout(time.time() + self.timeout,
+                                             self.check_transactions)
 
     def add_callback(self, cb_type, callback):
         if cb_type in self._callbacks:
@@ -201,3 +227,14 @@ class OvsdbConnectionManager:
             # Clear any change tracking info received for next notifications
             if cb_type == CHANGES_CB_TYPE:
                 self.idl.track_clear_all()
+
+    def register_schema_helper_columns(self, schema_helper, ext_schema):
+        app_log.debug("Registering schema helper columns..")
+
+        for table_name, table_schema in ext_schema.ovs_tables.iteritems():
+            if table_name in ON_DEMAND_FETCHED_TABLES:
+                schema_helper.register_columns(str(table_name),
+                                               table_schema.columns,
+                                               table_schema.readonly_columns)
+            else:
+                schema_helper.register_table(str(table_name))
