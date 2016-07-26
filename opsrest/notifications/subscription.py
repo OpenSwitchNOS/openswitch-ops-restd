@@ -34,6 +34,7 @@ from opsrest.notifications.exceptions import (
     NotificationValueError
 )
 from tornado.log import app_log
+from tornado import gen
 
 
 def construct_modified_msg(subscription_uri, resource_uri, changes):
@@ -56,17 +57,18 @@ def construct_deleted_msg(subscription_uri, resource_uri):
     return deleted
 
 
+@gen.coroutine
 def get_row_initial_values(row, table, schema, idl, resource_uri,
                            subscription_uri):
-    resource_data = get_row_json(row, table, schema, idl, resource_uri)
+    resource_data = yield get_row_json(row, table, schema, idl, resource_uri)
 
     # Remove categories returned by get_row_json
     columns_to_values = {}
     for category, column_data in resource_data.iteritems():
         columns_to_values.update(column_data)
 
-    return construct_added_msg(subscription_uri, resource_uri,
-                               columns_to_values)
+    raise gen.Return(construct_added_msg(subscription_uri, resource_uri,
+                                         columns_to_values))
 
 
 class Subscription(object):
@@ -98,10 +100,14 @@ class RowSubscription(Subscription):
         self.resource_uri = resource_uri
         self.row = row
 
+    @gen.coroutine
     def get_initial_values(self, idl, schema):
-        return get_row_initial_values(self.row, self.table, schema, idl,
-                                      self.resource_uri, self.subscription_uri)
+        values = yield get_row_initial_values(self.row, self.table, schema,
+                                              idl, self.resource_uri,
+                                              self.subscription_uri)
+        raise gen.Return(values)
 
+    @gen.coroutine
     def get_changes(self, manager, idl, schema):
         deleted = None
         modified = None
@@ -116,8 +122,8 @@ class RowSubscription(Subscription):
         # Check if it was deleted or modified
         if is_resource_modified(row_change_info, manager.curr_seqno):
             updated_cols = row_change_info.columns
-            columns_to_values = self.get_columns_to_values(updated_cols, idl,
-                                                           schema)
+            columns_to_values = yield self.get_columns_to_values(updated_cols,
+                                                                 idl, schema)
             modified = construct_modified_msg(self.subscription_uri,
                                               self.resource_uri,
                                               columns_to_values)
@@ -127,8 +133,9 @@ class RowSubscription(Subscription):
         else:
             raise NotificationMismatch("No changes detected")
 
-        return (None, modified, deleted)
+        raise gen.Return((None, modified, deleted))
 
+    @gen.coroutine
     def get_columns_to_values(self, columns, idl, schema):
         column_to_values = {}
         schema_table = schema.ovs_tables[self.table]
@@ -137,8 +144,8 @@ class RowSubscription(Subscription):
             data = None
 
             if column in schema_table.references:
-                data = get_column_json(column, self.row, self.table,
-                                       schema, idl, self.resource_uri)
+                data = yield get_column_json(column, self.row, self.table,
+                                             schema, idl, self.resource_uri)
             else:
                 ovs_column = None
 
@@ -156,7 +163,7 @@ class RowSubscription(Subscription):
 
             column_to_values[column] = data
 
-        return column_to_values
+        raise gen.Return(column_to_values)
 
     def __str__(self):
         info_str = super(RowSubscription, self).__str__()
@@ -179,18 +186,21 @@ class CollectionSubscription(Subscription):
         # populated with the rows currently in the DB.
         self.rows_to_uri = rows_to_uri
 
+    @gen.coroutine
     def get_initial_values(self, idl, schema):
         initial_values = []
 
         for row_uuid, resource_uri in self.rows_to_uri.iteritems():
-            data = get_row_initial_values(row_uuid, self.table, schema, idl,
-                                          resource_uri, self.subscription_uri)
+            data = yield get_row_initial_values(row_uuid, self.table, schema,
+                                                idl, resource_uri,
+                                                self.subscription_uri)
 
             if data:
                 initial_values.append(data)
 
-        return initial_values
+        raise gen.Return(initial_values)
 
+    @gen.coroutine
     def get_changes(self, manager, idl, schema):
         table_changes = get_table_changes_from_idl(self.table, idl)
         added = []
@@ -229,9 +239,11 @@ class CollectionSubscription(Subscription):
                 # Add new entry
                 self.rows_to_uri[row_uuid] = resource_uri
 
-                added_data = get_row_initial_values(row_uuid, self.table,
-                                                    schema, idl, resource_uri,
-                                                    self.subscription_uri)
+                added_data = \
+                    yield get_row_initial_values(row_uuid, self.table,
+                                                 schema, idl,
+                                                 resource_uri,
+                                                 self.subscription_uri)
 
                 added.append(added_data)
 
@@ -250,7 +262,7 @@ class CollectionSubscription(Subscription):
             else:
                 raise NotificationMismatch("No changes detected")
 
-        return (added, None, deleted)
+        raise gen.Return((added, None, deleted))
 
     def __str__(self):
         info_str = super(CollectionSubscription, self).__str__()
