@@ -1050,9 +1050,11 @@ def row_to_uri(row, table, schema, idl):
 
         if table == OVSDB_SCHEMA_SYSTEM_TABLE:
             path = path + [OVSDB_SCHEMA_SYSTEM_URI]
-        path.reverse()
-        uri = REST_VERSION_PATH + '/'.join(path)
-        return uri
+            break
+
+    path.reverse()
+    uri = REST_VERSION_PATH + '/'.join(path)
+    return uri
 
 def get_back_reference_children(parent, parent_table, child_table, schema, idl):
     references = schema.ovs_tables[child_table].references
