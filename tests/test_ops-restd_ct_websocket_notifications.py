@@ -114,6 +114,11 @@ BACK_REF_COLL_SUB = {
 
 PORT_INDEX = "Port1"
 TOP_LEVEL_ROW_CFG = PORT_DATA
+remove_keys = ['vlan_trunks', 'vlan_tag', 'vlan_mode']
+for key in remove_keys:
+    if key in TOP_LEVEL_ROW_CFG['configuration']:
+        del TOP_LEVEL_ROW_CFG['configuration'][key]
+
 TOP_LEVEL_ROW_SUB_POST_URI = "/rest/v1/system/ports"
 TOP_LEVEL_ROW_SUB_URI = "%s/%s" % (TOP_LEVEL_ROW_SUB_POST_URI, PORT_INDEX)
 TOP_LEVEL_ROW_SUB = {
@@ -775,7 +780,6 @@ class TestWebSocketEvents(testing.AsyncTestCase):
 
         conn.close()
 
-    @pytest.mark.skipif(True,reason="Disabling until PORT data is corrected in opsvsiutils")
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_row_top_level(self):
         """
@@ -820,7 +824,6 @@ class TestWebSocketEvents(testing.AsyncTestCase):
 
         conn.close()
 
-    @pytest.mark.skipif(True,reason="Disabling until PORT data is corrected in opsvsiutils")
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_row_top_level_modified(self):
         """
@@ -886,7 +889,6 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         conn.close()
 
 
-    @pytest.mark.skipif(True,reason="Disabling until PORT data is corrected in opsvsiutils")
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_row_top_level_deleted(self):
         """
@@ -1197,7 +1199,6 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         conn.close()
 
 
-    @pytest.mark.skipif(True,reason="Disabling until PORT data is corrected in opsvsiutils")
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_collection_top_level(self):
         """
@@ -1243,7 +1244,6 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         conn.close()
 
 
-    @pytest.mark.skipif(True,reason="Disabling until PORT data is corrected in opsvsiutils")
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_collection_top_level_added(self):
         """
@@ -1293,7 +1293,6 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         conn.close()
 
 
-    @pytest.mark.skipif(True,reason="Disabling until PORT data is corrected in opsvsiutils")
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_collection_top_level_deleted(self):
         """
