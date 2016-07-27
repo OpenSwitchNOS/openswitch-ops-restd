@@ -131,7 +131,10 @@ class OVSColumn(object):
             # column's type is assumed.
             kvs[column.attrib['key']] = {}
             if ('type' in column.attrib):
-                typeData = json.loads(column.attrib['type'])
+                try:
+                    typeData = json.loads(column.attrib['type'])
+                except:
+                    typeData = column.attrib['type']
                 base_type = types.BaseType.from_json(typeData)
                 type_, min_, max_ = self.process_type(base_type)
                 enum = base_type.enum
