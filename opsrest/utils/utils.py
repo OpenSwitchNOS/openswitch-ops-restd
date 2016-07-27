@@ -892,14 +892,12 @@ def update_category_keys(keys, row, idl, schema, table):
                       "have dynamic columns")
         return keys
 
-    result_keys = deepcopy(keys)
-
     # Get all columns
     columns = {}
-    columns.update(result_keys[OVSDB_SCHEMA_CONFIG])
-    columns.update(result_keys[OVSDB_SCHEMA_STATUS])
-    columns.update(result_keys[OVSDB_SCHEMA_STATS])
-    references = result_keys[OVSDB_SCHEMA_REFERENCE]
+    columns.update(keys[OVSDB_SCHEMA_CONFIG])
+    columns.update(keys[OVSDB_SCHEMA_STATUS])
+    columns.update(keys[OVSDB_SCHEMA_STATS])
+    references = keys[OVSDB_SCHEMA_REFERENCE]
 
     dynamic_columns = ovs_table.dynamic
     for column_name, category_obj in dynamic_columns.iteritems():
@@ -937,8 +935,8 @@ def update_category_keys(keys, row, idl, schema, table):
         # Check if the category changed
         if prev_category != new_category:
             if column_name in columns:
-                orig_columns = result_keys[prev_category]
-                dest_columns = result_keys[new_category]
+                orig_columns = keys[prev_category]
+                dest_columns = keys[new_category]
                 # Change the category
                 column = orig_columns[column_name]
                 column.category.value = new_category
@@ -950,10 +948,7 @@ def update_category_keys(keys, row, idl, schema, table):
                 reference = references[column_name]
                 reference.category.value = new_category
 
-    # Debugging
-    app_log.debug("Table: %s" % table)
-    app_log.debug("Keys: \n %s \n" % result_keys)
-    return result_keys
+    return keys
 
 
 def update_resource_keys(resource, schema, idl, data=None):
