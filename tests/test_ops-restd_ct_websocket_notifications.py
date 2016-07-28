@@ -140,7 +140,7 @@ class WebSocketEventTest(OpsVsiTest):
         self.switch = self.net.switches[0]
         self.switch_ip = get_switch_ip(self.switch)
 
-
+@pytest.mark.skipif(True, reason="fix nginx conf to support websockets")
 class TestWebSocketEvents(testing.AsyncTestCase):
     def setup(self):
         pass
