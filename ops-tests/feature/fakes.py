@@ -17,7 +17,15 @@
 
 from rest_utils_ft import login, execute_request
 import http.client
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
 
+=======
+import json
+from rest_utils_physical_ft import CRT_DIRECTORY_HS, HTTP_CREATED, HTTP_DELETED
+from copy import deepcopy
+
+flag = False
+>>>>>>> Making the REST tests work for tier-2
 
 FAKE_PORT_DATA = """
 {
@@ -106,6 +114,32 @@ def create_fake_port(path, switch_ip, port_index, cookie_header=None):
           port_index)
 
 
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
+=======
+def create_fake_port_ostl(path, port_index, hs1, step, login_result,
+                          cookie_header=None):
+    data = FAKE_PORT_DATA % {"index": port_index}
+
+    print("\n---------- Creating fake port (%s) ----------\n" %
+          port_index)
+    print("Testing path: %s\nTesting data: %s\n" % (path, data))
+
+    post_result = hs1.libs.openswitch_rest.system_ports_post(
+        json.loads(data),
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    status_code = post_result.get('status_code')
+    print("\nstatus code post result --> %s\n" % status_code)
+    assert status_code == HTTP_CREATED, \
+        "Response status received: %s\n" % status_code
+
+    print("---------- Creating fake port (%s) DONE ----------\n" %
+          port_index)
+
+
+>>>>>>> Making the REST tests work for tier-2
 def create_fake_vlan(path, switch_ip, fake_vlan_name, vlan_id,
                      cookie_header=None):
     if cookie_header is None:

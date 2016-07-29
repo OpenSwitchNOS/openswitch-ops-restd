@@ -27,6 +27,11 @@ import time
 import subprocess
 
 from copy import deepcopy
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
+=======
+from rest_utils_physical_ft import CRT_DIRECTORY_HS, HTTP_CREATED, \
+    HTTP_DELETED, HTTP_OK
+>>>>>>> Making the REST tests work for tier-2
 
 PORT_DATA = {
     "configuration": {
@@ -69,8 +74,13 @@ VLAN_DATA_654 = {
 }
 
 
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
 LOGIN_URI = '/rest/v1/login'
 ACCOUNT_URI = "/rest/v1/account"
+=======
+LOGIN_URI = '/login'
+ACCOUNT_URI = "/account"
+>>>>>>> Making the REST tests work for tier-2
 DEFAULT_USER = 'netop'
 DEFAULT_PASSWORD = 'netop'
 DEFAULT_BRIDGE = "bridge_normal"
@@ -114,6 +124,53 @@ def create_test_port(ip, cookie_header=None):
     return status_code, response_data
 
 
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
+=======
+def update_test_field_ostl(switch_ip, path, field, new_value, port_name,
+                            hs1, step,login_result, cookie_header=None):
+    """
+    Update field from existing table:
+        - Perform a GET request to an existing path defined in path
+        - Retrieve Configuration section
+        - Update field with new_value
+        - Perform a PUT request
+    """
+    get_result = hs1.libs.openswitch_rest.system_ports_id_get(
+            port_name,
+            https=CRT_DIRECTORY_HS,
+            cookies=login_result.get('cookies'),
+            request_timeout=5)
+
+    status_code = get_result.get('status_code')
+    response_data = get_result["content"]
+    assert status_code == HTTP_OK, "Wrong status code %s " % \
+                                         status_code
+    step("### Status code is %s ###\n" % status_code)
+    assert response_data is not "", \
+        "Response data received is malformed: %s\n" % response_data
+
+    port_print = {}
+    port_print["configuration"] = response_data["configuration"]
+
+    # update value
+    port_print["configuration"][field] = new_value
+
+    put_result = hs1.libs.openswitch_rest.system_ports_id_put(
+            port_name,
+            port_print,
+            https=CRT_DIRECTORY_HS,
+            cookies=login_result.get('cookies'),
+            request_timeout=5)
+
+    status_code = put_result.get('status_code')
+    response_data = put_result["content"]
+    assert status_code == HTTP_OK, "Wrong status code %s " % \
+                                         status_code
+    step("### Status code is %s ###\n" % status_code)
+    assert response_data is ""
+
+
+>>>>>>> Making the REST tests work for tier-2
 def update_test_field(switch_ip, path, field, new_value, cookie_header=None):
     if cookie_header is None:
         cookie_header = login(switch_ip)
@@ -133,6 +190,10 @@ def update_test_field(switch_ip, path, field, new_value, cookie_header=None):
     assert status_code is http.client.OK
     if isinstance(response_data, bytes):
         response_data = response_data.decode("utf-8")
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
+=======
+    assert status_code is http.client.OK
+>>>>>>> Making the REST tests work for tier-2
     assert response_data is not ""
 
     json_data = {}
@@ -246,6 +307,89 @@ def execute_port_operations(data, port_name, http_method, operation_uri,
     return results
 
 
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
+=======
+def execute_port_operations_ostl(data, port_name, http_method, operation_uri,
+                                 switch_ip, hs1, step, login_result):
+
+    results = []
+
+    for attribute in data:
+
+        attribute_name = attribute[0]
+        attribute_value = attribute[1]
+        expected_code = attribute[2]
+
+        request_data = deepcopy(PORT_DATA)
+        request_data['configuration']['name'] = \
+            "{0}_{1}_{2}".format(port_name, attribute_name, expected_code)
+
+        if http_method == 'PUT':
+
+            post_result = hs1.libs.openswitch_rest.system_ports_post(\
+                json.dumps(request_data), \
+                https=CRT_DIRECTORY_HS, \
+                cookies=login_result.get('cookies'),
+                request_timeout=5)
+
+            status_code = post_result.get('status_code')
+            assert status_code == HTTP_CREATED, \
+                "Validation failed, is not sending Bad Request error. " + \
+                "Status code: %s" % status_code
+
+            response_data = post_result.get('content')
+
+            if status_code != http.client.CREATED:
+                return []
+
+            port_uri = operation_uri + "/%s" % \
+                request_data['configuration']['name']
+
+            # Delete reference_by from PUT
+            del request_data['referenced_by']
+        else:
+            port_uri = operation_uri
+
+        # Execute request
+
+        print("Attempting to {0} a port with value '{1}' ({3}) for attribute \
+               '{2}'".format(http_method, attribute_value, attribute_name,
+                             type(attribute_value).__name__))
+        # Change value for specified attribute
+        request_data['configuration'][attribute_name] = attribute_value
+        post_result = hs1.libs.openswitch_rest.system_ports_post(
+            request_data,
+            https=CRT_DIRECTORY_HS,
+            cookies=login_result.get('cookies'),
+            request_timeout=5)
+
+        status_code = post_result.get('status_code')
+        print("\nstatus code post result --> %s\n" % status_code)
+        assert status_code == expected_code, \
+            "Validation failed, is not sending Bad Request error. " + \
+            "Status code: %s" % status_code
+
+        # Check if status code was as expected
+
+        if status_code != expected_code:
+            results.append((attribute_name, False, status_code))
+        else:
+            results.append((attribute_name, True, status_code))
+
+        if status_code == HTTP_CREATED:
+            delete_port = hs1.libs.openswitch_rest.system_ports_id_delete(
+                request_data['configuration']['name'],
+                https=CRT_DIRECTORY_HS,
+                cookies=login_result.get('cookies'),
+                request_timeout=5)
+
+            assert delete_port.get('status_code') == HTTP_DELETED, \
+                "Failed to delete the port"
+
+    return results
+
+
+>>>>>>> Making the REST tests work for tier-2
 def get_ssl_context():
     ssl_context = ssl.SSLContext(SSL_CONFIG[SSL_CFG_VERSION])
     ssl_context.verify_mode = SSL_CONFIG[SSL_CFG_VERIFY_MODE]
@@ -257,14 +401,22 @@ def get_ssl_context():
 
 def execute_request(path, http_method, data, ip, full_response=False,
                     xtra_header=None):
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
+=======
+
+>>>>>>> Making the REST tests work for tier-2
     url = path.replace(';', '&')
 
     headers = {"Content-type": "application/json", "Accept": "text/plain"}
     if xtra_header:
         headers.update(xtra_header)
 
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
     conn = http.client.HTTPSConnection(ip, 443,
                                         context=get_ssl_context())
+=======
+    conn = http.client.HTTPSConnection(ip, 443, context=get_ssl_context())
+>>>>>>> Making the REST tests work for tier-2
     time.sleep(2)
     conn.request(http_method, url, data, headers)
 
@@ -462,6 +614,10 @@ def get_server_crt(switch):
         count +=1
         time.sleep(1)
 
+<<<<<<< 077374c4cc15bd093c454196ac1b6a0b01813eed
+=======
+
+>>>>>>> Making the REST tests work for tier-2
 def remove_server_crt():
     crt_file = '/tmp/server.crt'
     if os.path.exists(crt_file):
