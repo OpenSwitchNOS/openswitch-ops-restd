@@ -2295,8 +2295,8 @@ c6 = ["conf t",
       "end"
       ]
 
-PATH = os.path.dirname(os.path.realpath(__file__))
-configs = [c1, c2, c3, c4, c5]
+
+configs = [c1, c2, c3, c4, c5, c6]
 
 
 def reboot_switch(ops1, step):
