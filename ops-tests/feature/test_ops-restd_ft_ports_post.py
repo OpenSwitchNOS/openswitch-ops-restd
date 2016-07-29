@@ -18,20 +18,27 @@
 
 from pytest import fixture, mark
 
+from topology_common.ops.configuration_plane.rest.rest \
+    import create_certificate_and_copy_to_host
 
-import json
-import http.client
+from rest_utils_physical_ft import set_rest_server, add_ip_devices, \
+    ensure_connectivity, login_to_physical_switch, SW_IP, HS_IP,\
+    CRT_DIRECTORY_HS, HTTP_CREATED, HTTP_OK, HTTP_DELETED, HTTP_BAD_REQUEST
 
 from rest_utils_ft import (
     execute_request, login, get_switch_ip, rest_sanity_check,
-    PORT_DATA, execute_port_operations, get_server_crt,
-    remove_server_crt
+    PORT_DATA, execute_port_operations, execute_port_operations_ostl,
+    get_server_crt, remove_server_crt
 )
-from swagger_test_utility import swagger_model_verification
 
+from swagger_test_utility import swagger_model_verification
 from copy import deepcopy
 from os import environ
 from time import sleep
+from datetime import datetime
+
+import json
+import http.client
 
 # Topology definition. the topology contains two back to back switches
 # having four links between them.
@@ -39,18 +46,18 @@ from time import sleep
 
 TOPOLOGY = """
 # +-------+     +-------+
-# |  ops1  <----->  hs1  |
+# |  sw1  <----->  hs1  |
 # +-------+     +-------+
 
 # Nodes
-[type=openswitch name="Switch 1"] ops1
+[type=openswitch name="Switch 1"] sw1
 [type=oobmhost name="Host 1"] hs1
 
 # Ports
-[force_name=oobm] ops1:sp1
+[force_name=oobm] sw1:sp1
 
 # Links
-ops1:sp1 -- hs1:1
+sw1:sp1 -- hs1:1
 """
 
 
@@ -59,6 +66,7 @@ cookie_header = None
 proxy = None
 PATH = None
 PORT_PATH = None
+RESOURCE_NAME = "Port1"
 
 
 NUM_OF_SWITCHES = 1
@@ -71,9 +79,9 @@ switches = []
 def netop_login(request, topology):
     global cookie_header, SWITCH_IP, proxy
     cookie_header = None
-    ops1 = topology.get("ops1")
-    assert ops1 is not None
-    switches = [ops1]
+    sw1 = topology.get("sw1")
+    assert sw1 is not None
+    switches = [sw1]
     if SWITCH_IP is None:
         SWITCH_IP = get_switch_ip(switches[0])
     proxy = environ["https_proxy"]
@@ -93,12 +101,12 @@ def netop_login(request, topology):
 
 @fixture(scope="module")
 def setup_test(topology):
-    global PATH, PORT_PATH
+    global PATH, PORT_PATH, RESOURCE_NAME
     PATH = "/rest/v1/system/ports"
-    PORT_PATH = PATH + "/Port1"
-    ops1 = topology.get("ops1")
-    assert ops1 is not None
-    switches = [ops1]
+    PORT_PATH = PATH + "/" + RESOURCE_NAME
+    sw1 = topology.get("sw1")
+    assert sw1 is not None
+    switches = [sw1]
     sleep(2)
     get_server_crt(switches[0])
     rest_sanity_check(SWITCH_IP)
@@ -152,18 +160,101 @@ def create_port(step):
     step("\n########## End Test to Validate Create Port ##########\n")
 
 
+def create_port_ostl(hs1, step, login_result):
+    step("\n########## Test to Validate Create Port ##########\n")
+
+    post_result = hs1.libs.openswitch_rest.system_ports_post(
+        PORT_DATA,
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    status_code = post_result.get('status_code')
+    assert status_code == HTTP_CREATED, \
+        "Error creating a Port. Status code: %s Response data: %s " % \
+        (status_code, post_result)
+    step("### Port Created. Status code is 201 CREATED  ###\n")
+
+    # Verify data
+    get_result = hs1.libs.openswitch_rest.system_ports_id_get(
+        RESOURCE_NAME,
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    status_code = get_result.get('status_code')
+    response_data = get_result["content"]
+    assert status_code == HTTP_OK, "Failed to query added Port"
+
+    assert response_data["configuration"] == PORT_DATA["configuration"], \
+        "Configuration data is not equal that posted data"
+    step("### Configuration data validated ###\n")
+
+    step("\n########## End Test to Validate Create Port ##########\n")
+
+
 def create_same_port(step):
     step("\n########## Test create same port ##########\n")
     status_code, response_data = execute_request(
         PORT_PATH, "POST", json.dumps(PORT_DATA), SWITCH_IP,
         xtra_header=cookie_header)
 
-    assert status_code == http.client.BAD_REQUEST, \
+    assert status_code == HTTP_BAD_REQUEST, \
         "Validation failed, is not sending Bad Request error. " + \
         "Status code: %s" % status_code
     step("### Port not modified. Status code is 400 Bad Request  ###\n")
 
     step("\n########## End Test create same Port ##########\n")
+
+
+def create_same_port_ostl(hs1, step, login_result):
+    step("\n########## Test create same port ##########\n")
+
+    post_result = hs1.libs.openswitch_rest.system_ports_post(
+        PORT_DATA,
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    status_code = post_result.get('status_code')
+    assert status_code == HTTP_BAD_REQUEST, \
+        "Validation failed, is not sending Bad Request error. " + \
+        "Status code: %s" % status_code
+    step("### Port not modified. Status code is 400 Bad Request  ###\n")
+
+    delete_port = hs1.libs.openswitch_rest.system_ports_id_delete(
+        RESOURCE_NAME,
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    assert delete_port.get('status_code') == HTTP_DELETED, \
+        "Failed to delete the port"
+    step("\n########## End Test create same Port ##########\n")
+
+
+def verify_attribute_type_ostl(hs1, step, login_result):
+
+    step("\n########## Test to verify attribute types ##########\n")
+
+    step("\nAttempting to create port with incorrect type in attributes\n")
+
+    data = [("ip4_address", 192, HTTP_BAD_REQUEST),
+            ("ip4_address", "192.168.0.1/24", HTTP_CREATED)]
+    results = execute_port_operations_ostl(data, "PortTypeTest", "POST",
+                                           PATH, SWITCH_IP, hs1, step,
+                                           login_result)
+
+    assert results, "Unable to execute requests in verify_attribute_type"
+
+    for attribute in results:
+        assert attribute[1], "%s code issued " % attribute[2] + \
+            "instead of %s for type " % attribute[3] + \
+            "test in field '%s'" % attribute[0]
+        step("%s code received as expected for field %s!\n" %
+             (attribute[2], attribute[0]))
+
+    step("\n########## End test to verify attribute types ##########\n")
 
 
 def verify_attribute_type(step):
@@ -172,8 +263,8 @@ def verify_attribute_type(step):
 
     step("\nAttempting to create port with incorrect type in attributes\n")
 
-    data = [("ip4_address", 192, http.client.BAD_REQUEST),
-            ("ip4_address", "192.168.0.1/24", http.client.CREATED)]
+    data = [("ip4_address", 192, HTTP_BAD_REQUEST),
+            ("ip4_address", "192.168.0.1/24", HTTP_CREATED)]
     results = execute_port_operations(data, "PortTypeTest", "POST",
                                       PATH, SWITCH_IP,
                                       cookie_header)
@@ -183,6 +274,7 @@ def verify_attribute_type(step):
     for attribute in results:
         assert attribute[1], "%s code issued " % attribute[2] + \
             "for test in field '%s'" % attribute[0]
+
         step("%s code received as expected for field %s!\n" %
              (attribute[2], attribute[0]))
 
@@ -204,10 +296,42 @@ def verify_attribute_range(step):
             ("ip4_address", "175.167.134.123/24", http.client.CREATED),
             ("interfaces", interfaces_out_of_range, http.client.BAD_REQUEST),
             ("interfaces", ["/rest/v1/system/interfaces/1"],
-             http.client.CREATED)]
+             HTTP_CREATED)]
     results = execute_port_operations(data, "PortRangesTest", "POST",
                                       PATH, SWITCH_IP,
                                       cookie_header)
+
+    assert results, "Unable to execute requests in verify_attribute_range"
+
+    for attribute in results:
+        assert attribute[1], "%s code issued " % attribute[2] + \
+            "instead of %s for value range " % attribute[3] + \
+            "test in field '%s'" % attribute[0]
+        step("%s code received as expected for field %s!\n" %
+             (attribute[2], attribute[0]))
+
+    step("\n########## End test to verify attribute ranges ##########\n")
+
+
+def verify_attribute_range_ostl(hs1, step, login_result):
+
+    step("\n########## Test to verify attribute ranges ##########\n")
+
+    step("\nAttempting to create a port with out of range values in "
+         "attributes\n")
+
+    interfaces_out_of_range = []
+    for i in range(1, 10):
+        interfaces_out_of_range.append("/rest/v1/system/interfaces/%s" % i)
+
+    data = [("ip4_address", "175.167.134.123/248", http.client.BAD_REQUEST),
+            ("ip4_address", "175.167.134.123/24", http.client.CREATED),
+            ("interfaces", interfaces_out_of_range, http.client.BAD_REQUEST),
+            ("interfaces", ["/rest/v1/system/interfaces/1"],
+             http.client.CREATED)]
+    results = execute_port_operations_ostl(data, "PortRangesTest", "POST",
+                                           PATH, SWITCH_IP, hs1, step,
+                                           login_result)
 
     assert results, "Unable to execute requests in verify_attribute_range"
 
@@ -233,6 +357,32 @@ def verify_attribute_value(step):
     results = execute_port_operations(data, "PortValidValueTest", "POST",
                                       PATH, SWITCH_IP,
                                       cookie_header)
+
+    assert results, "Unable to execute requests in verify_attribute_value"
+
+    for attribute in results:
+        assert attribute[1], "%s code issued " % attribute[2] + \
+            "instead of %s for attribute " % attribute[3] + \
+            "valid value test in field '%s'" % attribute[0]
+        step("%s code received as expected for field %s!\n" %
+             (attribute[2], attribute[0]))
+
+    step("\n########## End test to verify attribute valid value "
+         "##########\n")
+
+
+def verify_attribute_value_ostl(hs1, step, login_result):
+
+    step("\n########## Test to verify attribute valid value ##########\n")
+
+    step("\nAttempting to create port with invalid value in attributes\n")
+
+    data = [("vlan_mode", "invalid_value", http.client.BAD_REQUEST),
+            ("vlan_mode", "access", http.client.CREATED)]
+
+    results = execute_port_operations_ostl(data, "PortValidValueTest", "POST",
+                                           PATH, SWITCH_IP, hs1, step,
+                                           login_result)
 
     assert results, "Unable to execute requests in verify_attribute_value"
 
@@ -290,6 +440,63 @@ def verify_missing_attribute(step):
     step("\n########## End test to verify missing attribute ##########\n")
 
 
+def verify_missing_attribute_ostl(hs1, step, login_result):
+
+    step("\n########## Test to verify missing attribute ##########\n")
+
+    request_data = deepcopy(PORT_DATA)
+
+    # Try to POST a port with missing attribute in request data
+
+    step("\nAttempting to create a port with missing attribute in request "
+         "data\n")
+
+    del request_data['configuration']['name']
+
+    post_result = hs1.libs.openswitch_rest.system_ports_post(
+        request_data,
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    status_code = post_result.get('status_code')
+    assert status_code == HTTP_BAD_REQUEST, \
+        "%s code issued instead of BAD_REQUEST for Port with missing " + \
+        "attribute" % status_code
+
+    step("BAD_REQUEST code received as expected!")
+
+    # Try to POST a port with all attributes in request data
+    step("\nAttempting to create port with all attributes in request " +
+         "data\n")
+
+    request_data['configuration']['name'] = 'PortAllAttributes'
+
+    post_result = hs1.libs.openswitch_rest.system_ports_post(
+        request_data,
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    status_code = post_result.get('status_code')
+    assert status_code == HTTP_CREATED, \
+        "Got %s code instead of CREATED for Port with all attributes" % \
+        status_code
+
+    step("CREATE code received as expected!\n")
+
+    delete_port = hs1.libs.openswitch_rest.system_ports_id_delete(
+        request_data['configuration']['name'],
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    assert delete_port.get('status_code') == HTTP_DELETED, \
+        "Failed to delete the port"
+
+    step("\n########## End test to verify missing attribute ##########\n")
+
+
 def verify_unknown_attribute(step):
 
     step("\n########## Test to verify unkown attribute ##########\n")
@@ -302,6 +509,31 @@ def verify_unknown_attribute(step):
     results = execute_port_operations(data, "PortUnknownAttributeTest",
                                       "POST", PATH, SWITCH_IP,
                                       cookie_header)
+
+    assert results, "Unable to execute request in verify_unknown_attribute"
+
+    for attribute in results:
+        assert attribute[1], "%s code issued " % attribute[2] + \
+            "instead of %s for unknown " % attribute[3] + \
+            "attribute test in field '%s'" % attribute[0]
+        step("%s code received as expected for field %s!\n" %
+             (attribute[2], attribute[0]))
+
+    step("\n########## End test to verify unkown attribute ##########\n")
+
+
+def verify_unknown_attribute_ostl(hs1, step, login_result):
+
+    step("\n########## Test to verify unkown attribute ##########\n")
+
+    step("\nAttempting to create a port with an unknown attribute\n")
+
+    data = [("unknown_attribute", "unknown_value", http.client.BAD_REQUEST),
+            ("vlan_mode", "access", http.client.CREATED)]
+
+    results = execute_port_operations_ostl(data, "PortUnknownAttributeTest",
+                                           "POST", PATH, SWITCH_IP, hs1, step,
+                                           login_result)
 
     assert results, "Unable to execute request in verify_unknown_attribute"
 
@@ -357,12 +589,70 @@ def verify_malformed_json(step):
     step("\n########## End test to verify malformed JSON ##########\n")
 
 
+def verify_malformed_json_ostl(hs1, step, login_result):
+
+    step("\n########## Test to verify malformed JSON ##########\n")
+
+    request_data = deepcopy(PORT_DATA)
+
+    # Try to POST a port with a malformed JSON in request data
+
+    step("\nAttempting to create port with a malformed JSON in request " +
+         "data\n")
+
+    request_data['configuration']['name'] = 'PortMalformedJSON'
+    json_string = json.dumps(request_data)
+    json_string += ","
+
+    try:
+        json_data = json.loads(json_string)
+        post_result = hs1.libs.openswitch_rest.system_ports_post(
+            json_data,
+            https=CRT_DIRECTORY_HS,
+            cookies=login_result.get('cookies'),
+            request_timeout=5)
+    except:
+        step("malformed JSON in request data")
+
+    # Try to POST a port with a correct JSON in request data
+    step("\nAttempting to create port with a correct JSON in request"
+         "data\n")
+
+    request_data['configuration']['name'] = 'PortCorrectJSON'
+
+    post_result = hs1.libs.openswitch_rest.system_ports_post(
+        request_data,
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    status_code = post_result.get('status_code')
+
+    assert status_code == HTTP_CREATED, \
+        "%s code issued instead of CREATED for Port with correct JSON " + \
+        "in request data" % status_code
+
+    step("CREATE code received as expected!\n")
+
+    delete_port = hs1.libs.openswitch_rest.system_ports_id_delete(
+        request_data['configuration']['name'],
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    assert delete_port.get('status_code') == HTTP_DELETED, \
+        "Failed to delete the port"
+
+    step("\n########## End test to verify malformed JSON ##########\n")
+
+
 @mark.gate
+@mark.platform_incompatible(['ostl'])
 def test_ops_restd_ft_ports_post(topology, step, netop_login, setup_test):
     global switches
-    ops1 = topology.get("ops1")
-    assert ops1 is not None
-    switches = [ops1]
+    sw1 = topology.get("sw1")
+    assert sw1 is not None
+    switches = [sw1]
     create_port_with_depth(step)
     create_port(step)
     create_same_port(step)
@@ -375,3 +665,32 @@ def test_ops_restd_ft_ports_post(topology, step, netop_login, setup_test):
     step("container_id_test %s\n" % switches[0].container_id)
     swagger_model_verification(switches[0].container_id, "/system/ports",
                                "POST", PORT_DATA, SWITCH_IP)
+
+
+@mark.gate
+@mark.platform_incompatible(['docker'])
+def test_ops_restd_ft_ports_post_ostl(topology, step):
+
+    sw1 = topology.get('sw1')
+    hs1 = topology.get('hs1')
+
+    assert sw1 is not None
+    assert hs1 is not None
+
+    date = str(datetime.now())
+    sw1.send_command('date --set="%s"' % date, shell='bash')
+
+    add_ip_devices(sw1, hs1, step)
+    ensure_connectivity(hs1, step)
+    set_rest_server(hs1, step)
+    create_certificate_and_copy_to_host(sw1, SW_IP, HS_IP, step=step)
+
+    login_result = login_to_physical_switch(hs1, step)
+    create_port_ostl(hs1, step, login_result)
+    create_same_port_ostl(hs1, step, login_result)
+    verify_attribute_type_ostl(hs1, step, login_result)
+    verify_attribute_range_ostl(hs1, step, login_result)
+    verify_attribute_value_ostl(hs1, step, login_result)
+    verify_missing_attribute_ostl(hs1, step, login_result)
+    verify_unknown_attribute_ostl(hs1, step, login_result)
+    verify_malformed_json_ostl(hs1, step, login_result)
