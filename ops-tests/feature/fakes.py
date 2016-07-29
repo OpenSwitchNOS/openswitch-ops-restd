@@ -17,6 +17,8 @@
 
 from rest_utils_ft import login, execute_request
 import http.client
+import json
+from rest_utils_physical_ft import CRT_DIRECTORY_HS, HTTP_CREATED
 
 
 FAKE_PORT_DATA = """
@@ -102,6 +104,29 @@ def create_fake_port(path, switch_ip, port_index, cookie_header=None):
     assert response_data is "", \
         "Response data received: %s\n" % response_data
     print("Response data: %s\n" % response_data)
+    print("---------- Creating fake port (%s) DONE ----------\n" %
+          port_index)
+
+
+def create_fake_port_ostl(path, port_index, hs1, step, login_result,
+                          cookie_header=None):
+    data = FAKE_PORT_DATA % {"index": port_index}
+
+    print("\n---------- Creating fake port (%s) ----------\n" %
+          port_index)
+    print("Testing path: %s\nTesting data: %s\n" % (path, data))
+
+    post_result = hs1.libs.openswitch_rest.system_ports_post(
+        json.loads(data),
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+
+    status_code = post_result.get('status_code')
+    print("\nstatus code post result --> %s\n" % status_code)
+    assert status_code == HTTP_CREATED, \
+        "Response status received: %s\n" % status_code
+
     print("---------- Creating fake port (%s) DONE ----------\n" %
           port_index)
 
