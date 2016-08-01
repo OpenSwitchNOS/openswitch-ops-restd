@@ -29,7 +29,7 @@ class OvsdbApiApplication(Application):
         self.manager = OvsdbConnectionManager(self.settings.get('ovs_remote'),
                                               self.settings.get('ovs_schema'))
         schema = self.settings.get('ext_schema')
-        self.restschema = restparser.parseSchema(schema, parse_doc=False)
+        self.restschema = restparser.parseSchema(schema)
         self._url_patterns = self._get_url_patterns()
         Application.__init__(self, self._url_patterns, **self.settings)
 

@@ -31,9 +31,6 @@ import ovs.util
 # Global variables
 inflect_engine = inflect.engine()
 
-# Whether to load the documentation strings in the resulting schema object
-load_doc = True
-
 # Schema constants
 OVSDB_SCHEMA_CONFIG = 'configuration'
 OVSDB_SCHEMA_STATS = 'statistics'
@@ -153,11 +150,11 @@ class OVSColumn(object):
             # Process this key's documentation information
             self.kvs[key]['desc'] = None
             self.kvs[key]['group'] = None
-            if load_doc:
-                if 'doc' in value:
-                    self.kvs[key]['desc'] = ' '.join(value['doc'])
-                if 'group' in value:
-                    self.kvs[key]['group'] = value['group']
+
+            if 'doc' in value:
+                self.kvs[key]['desc'] = ' '.join(value['doc'])
+            if 'group' in value:
+                self.kvs[key]['group'] = value['group']
 
     def process_type(self, base):
         __type = base.type
@@ -366,18 +363,17 @@ class OVSTable(object):
 
         doc = None
 
-        # Though these will not be used if load_doc=False,
-        # they have to be parsed or OVS' Parser will fail
+        # Though these will not be used if documentation is not
+        # loaded, they have to be parsed or OVS' Parser will fail
         _title = parser.get_optional('title', [str, unicode])
         _doc = parser.get_optional('doc', [list, str, unicode])
 
-        if load_doc:
-            doc = []
-            if _title:
-                doc = [_title]
-            if _doc:
-                doc.extend(_doc)
-            doc = ' '.join(doc)
+        doc = []
+        if _title:
+            doc = [_title]
+        if _doc:
+            doc.extend(_doc)
+        doc = ' '.join(doc)
 
         parser.finish()
 
@@ -433,15 +429,14 @@ class OVSTable(object):
             col_doc = None
             group = None
 
-            # Though these will not be used if load_doc=False,
-            # they have to be parsed or OVS' Parser will fail
+            # Though these will not be used if documentation is not
+            # loaded, they have to be parsed or OVS' Parser will fail
             _col_doc = parser.get_optional('doc', [list])
             _group = parser.get_optional('group', [list, str, unicode])
 
-            if load_doc:
-                if _col_doc:
-                    col_doc = ' '.join(_col_doc)
-                group = _group
+            if _col_doc:
+                col_doc = ' '.join(_col_doc)
+            group = _group
 
             parser.finish()
 
@@ -567,14 +562,13 @@ class RESTSchema(object):
         tablesJson = parser.get('tables', [dict])
 
         groups_doc = None
-        # Though these will not be used if load_doc=False,
-        # they have to be parsed or OVS' Parser will fail
+        # Though these will not be used if documentation is not
+        # loaded, they have to be parsed or OVS' Parser will fail
         _groups_doc = parser.get_optional('groups', [dict])
 
-        if load_doc:
-            groups_doc = _groups_doc
-            for group in groups_doc:
-                groups_doc[group] = ' '.join(groups_doc[group]['doc'])
+        groups_doc = _groups_doc
+        for group in groups_doc:
+            groups_doc[group] = ' '.join(groups_doc[group]['doc'])
 
         parser.finish()
 
@@ -706,11 +700,7 @@ def _has_config_index(table, schema):
     return False
 
 
-def parseSchema(schemaFile, title=None, version=None, parse_doc=True):
-    # Initialize a global variable here
-    global load_doc
-
-    load_doc = parse_doc
+def parseSchema(schemaFile, title=None, version=None):
 
     schema = RESTSchema.from_json(ovs.json.from_file(schemaFile))
 
