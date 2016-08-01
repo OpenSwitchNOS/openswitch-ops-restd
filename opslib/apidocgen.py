@@ -185,7 +185,8 @@ def genCoreParams(table, parent_plurality, parents, resource_name,
             param = {}
             param["name"] = "p"*(depth-level) + "id"
             param["in"] = "path"
-            param["description"] = normalizeName(parents[level], plural) + " id"
+            param["description"] = normalizeName(parents[level], plural) + \
+                " id"
             param["required"] = True
             param["type"] = "string"
             params.append(param)
@@ -194,7 +195,8 @@ def genCoreParams(table, parent_plurality, parents, resource_name,
         param = {}
         param["name"] = "id"
         param["in"] = "path"
-        param["description"] = normalizeName(resource_name, plural) + " id"
+        param["description"] = normalizeName(resource_name, plural) + \
+            " id"
         param["required"] = True
         param["type"] = "string"
         params.append(param)
@@ -218,8 +220,9 @@ def genGetParams(table, is_instance=False):
     param = {}
     param["name"] = "depth"
     param["in"] = "query"
-    param["description"] = "maximum depth of subresources included in result, " + \
-                           "where depth value can be between zero and ten"
+    param["description"] = "maximum depth of subresources included in " + \
+                           "result, where depth value can be between zero " + \
+                           "and ten"
     param["required"] = False
     param["type"] = "string"
     params.append(param)
@@ -230,8 +233,8 @@ def genGetParams(table, is_instance=False):
         param["name"] = "sort"
         param["in"] = "query"
         param["description"] = "comma separated list of columns to sort " + \
-                                "results by, add a - (dash) at the beginning " + \
-                                "to make sort descending"
+                               "results by, add a - (dash) at the " + \
+                               "beginning to make sort descending"
         param["required"] = False
         param["type"] = "string"
         params.append(param)
@@ -240,7 +243,7 @@ def genGetParams(table, is_instance=False):
         param["name"] = "offset"
         param["in"] = "query"
         param["description"] = "index of the first element from the result" + \
-                                " list to be returned"
+                               " list to be returned"
         param["required"] = False
         param["type"] = "integer"
         params.append(param)
@@ -273,7 +276,8 @@ def genGetParams(table, is_instance=False):
                 param = {}
                 param["name"] = column
                 param["in"] = "query"
-                param["description"] = "filter '%s' by specified value" % column
+                param["description"] = "filter '%s' by specified value" \
+                    % column
                 param["required"] = False
 
                 if data.type == types.IntegerType:
@@ -438,7 +442,8 @@ def genPutInstance(table, parent_plurality, parents, resource_name, is_plural):
         return op
 
 
-def genPatchInstance(table, parent_plurality, parents, resource_name, is_plural):
+def genPatchInstance(table, parent_plurality, parents, resource_name,
+                     is_plural):
     if table.config:
         op = {}
         op["summary"] = "Update configuration"
@@ -551,13 +556,40 @@ def genBaseTypeList(type, desc):
     return sub
 
 
+def get_ref_key_and_type(table_name, parent_table, schema):
+    keyName = None
+    keyname_type = None
+
+    if parent_table:
+        references = schema.ovs_tables[parent_table].references
+        for col_ref_name, ref_table in references.iteritems():
+            column_ovsref = references[col_ref_name]
+            if str(ref_table.ref_table) == table_name:
+                if hasattr(column_ovsref, 'keyname'):
+                    keyName = column_ovsref.keyname
+                    keyname_type = str(column_ovsref.type)
+                else:
+                    keyName = None
+                break
+
+    return keyName, keyname_type
+
+
 # Generate definitions including "properties" and "required" for all columns.
 # Tuples of "properties" dictionary and "required" array are returned.
-def genAllColDefinition(cols, table_name, definitions):
+def genAllColDefinition(cols, table_name, definitions,
+                        table_parent=None, schema=None):
     properties = {}
     required = []
+
+    keyName, keyname_type = get_ref_key_and_type(table_name, table_parent,
+                                                 schema)
     for colName, col in cols:
         properties[colName] = genDefinition(table_name, col, definitions)
+        if keyName:
+            properties[keyName] = {'type': keyname_type,
+                                   'description': 'Forward reference key'}
+            required.append(keyName)
 
         if not col.is_optional:
             required.append(col.name)
@@ -633,7 +665,7 @@ def refProperties(schema, table, col_name):
     if table.references[col_name].is_plural:
         sub["type"] = "array"
         sub["description"] = "A list of " + child_table.name \
-                              + " references"
+                             + " references"
         item = {}
         item["$ref"] = "#/definitions/Resource"
         sub["items"] = item
@@ -646,7 +678,8 @@ def refProperties(schema, table, col_name):
 
 def getDefinition(schema, table, definitions):
     properties_config, required = genAllColDefinition(table.config.iteritems(),
-                                                      table.name, definitions)
+                                                      table.name, definitions,
+                                                      table.parent, schema)
     properties_full = copy.deepcopy(properties_config)
 
     # References are included in configuration if and only if they belong
@@ -829,8 +862,7 @@ def genPatchDefinition(definitions):
     patch_from["description"] = "A JSON Pointer. "\
         "Target location where the operation is performed."
 
-    properties = {
-                  "op" : patch_op,
+    properties = {"op": patch_op,
                   "path": patch_path,
                   "value": patch_value,
                   "from": patch_from
@@ -890,7 +922,7 @@ def genAPI(paths, definitions, schema, table, resource_name, parent,
             ops["put"] = op
 
         op = genPatchInstance(table, parent_plurality, parents,
-                            resource_name, is_plural)
+                              resource_name, is_plural)
         if op is not None:
             ops["patch"] = op
 
@@ -910,7 +942,7 @@ def genAPI(paths, definitions, schema, table, resource_name, parent,
             ops["put"] = op
 
         op = genPatchInstance(table, parent_plurality, parents,
-                            resource_name, is_plural)
+                              resource_name, is_plural)
         if op is not None:
             ops["patch"] = op
 
@@ -1104,6 +1136,8 @@ def genCustomAPI(resource_name, path, paths,
         op["description"] = "Get a set of attributes"
         op["tags"] = [resource_name]
 
+        params = []
+        op["parameters"] = params
         responses = {}
         response = {}
         response["description"] = "OK"
@@ -1196,7 +1230,8 @@ def genCustomAPI(resource_name, path, paths,
         # Update Operation
         op = {}
         op["summary"] = "Update configuration"
-        op["description"] = "Update configuration using JSON PATCH Specification"
+        op["description"] = "Update configuration using JSON PATCH " + \
+                            "Specification"
         op["tags"] = [resource_name]
 
         params = []
@@ -1248,9 +1283,11 @@ def genCustomAPI(resource_name, path, paths,
         op["responses"] = responses
         ops_id["delete"] = op
 
-    path_id = path + "/{id}"
-    paths[path_id] = ops_id
-    paths[path] = ops
+    if ops_id:
+        path_id = path + "/{id}"
+        paths[path_id] = ops_id
+    if ops:
+        paths[path] = ops
 
 
 def getFullConfigDef(schema, definitions):
@@ -1319,6 +1356,36 @@ def genFullConfigAPI(paths):
 
     ops["put"] = op
 
+    op = {}
+    op["summary"] = "Update full declarative configuration"
+    op["description"] = "Update full declarative configuration"
+    op["tags"] = ["FullConfiguration"]
+
+    params = []
+    param = {}
+    param["name"] = "type"
+    param["in"] = "query"
+    param["description"] = "select from running or startup, \
+                            default to running"
+    param["required"] = False
+    param["type"] = "string"
+    params.append(param)
+    param = {}
+    param["name"] = "data"
+    param["in"] = "body"
+    param["description"] = "declarative configuration"
+    param["required"] = True
+    param["schema"] = {'$ref': "#/definitions/SystemConfigFull"}
+    params.append(param)
+
+    op["parameters"] = params
+
+    responses = {}
+    addPatchResponse(responses)
+    op["responses"] = responses
+
+    ops["patch"] = op
+
     paths[path] = ops
 
 
@@ -1358,6 +1425,40 @@ def genUserLogin(paths):
     response["description"] = "Bad request"
     response["schema"] = {'$ref': "#/definitions/Error"}
     responses["400"] = response
+
+    op["responses"] = responses
+
+    ops["post"] = op
+
+    paths[path] = ops
+
+
+def genUserLogout(paths):
+    path = "/logout"
+
+    ops = {}
+    op = {}
+    op["summary"] = "User logout"
+    op["description"] = "Log user out of the system"
+    op["tags"] = ["User"]
+
+    params = []
+
+    op["parameters"] = params
+
+    responses = {}
+    response = {}
+    response["description"] = "User logged out successfully, cookie removed"
+    responses["200"] = response
+
+    response = {}
+    response["description"] = "Bad request"
+    response["schema"] = {'$ref': "#/definitions/Error"}
+    responses["400"] = response
+
+    response = {}
+    response["description"] = "User not authenticated"
+    responses["401"] = response
 
     op["responses"] = responses
 
@@ -1597,6 +1698,9 @@ def getFullAPI(schema):
     # Creating the login URL
     genUserLogin(paths)
 
+    # Creating the logout URL
+    genUserLogout(paths)
+
     # Creating the logs URL
     genLogsAPI(paths, definitions)
 
@@ -1637,7 +1741,7 @@ def getFullAPI(schema):
 
 
 def docGen(schemaFile, title=None, version=None):
-    schema = parseSchema(schemaFile)
+    schema = parseSchema(schemaFile, loadDescription=True)
 
     # Special treat System table as /system resource
     schema.ovs_tables["System"] = schema.ovs_tables.pop("System")
@@ -1664,6 +1768,7 @@ The following options are also available:
 
 
 if __name__ == "__main__":
+
     try:
         try:
             options, args = getopt.gnu_getopt(sys.argv[1:], 'h',

@@ -114,6 +114,11 @@ BACK_REF_COLL_SUB = {
 
 PORT_INDEX = "Port1"
 TOP_LEVEL_ROW_CFG = PORT_DATA
+remove_keys = ['vlan_trunks', 'vlan_tag', 'vlan_mode']
+for key in remove_keys:
+    if key in TOP_LEVEL_ROW_CFG['configuration']:
+        del TOP_LEVEL_ROW_CFG['configuration'][key]
+
 TOP_LEVEL_ROW_SUB_POST_URI = "/rest/v1/system/ports"
 TOP_LEVEL_ROW_SUB_URI = "%s/%s" % (TOP_LEVEL_ROW_SUB_POST_URI, PORT_INDEX)
 TOP_LEVEL_ROW_SUB = {
@@ -140,7 +145,7 @@ class WebSocketEventTest(OpsVsiTest):
         self.switch = self.net.switches[0]
         self.switch_ip = get_switch_ip(self.switch)
 
-
+@pytest.mark.skipif(True, reason="fix nginx conf to support websockets")
 class TestWebSocketEvents(testing.AsyncTestCase):
     def setup(self):
         pass
@@ -164,6 +169,7 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         remove_server_crt()
 
     def setup_method(self, method):
+        sleep(2)
         pass
 
     def teardown_method(self, method):
@@ -883,6 +889,7 @@ class TestWebSocketEvents(testing.AsyncTestCase):
 
         conn.close()
 
+
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_row_top_level_deleted(self):
         """
@@ -1192,6 +1199,7 @@ class TestWebSocketEvents(testing.AsyncTestCase):
 
         conn.close()
 
+
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_collection_top_level(self):
         """
@@ -1235,6 +1243,7 @@ class TestWebSocketEvents(testing.AsyncTestCase):
             "Unable to delete resource. Status: %s" % status_code
 
         conn.close()
+
 
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_collection_top_level_added(self):
@@ -1283,6 +1292,7 @@ class TestWebSocketEvents(testing.AsyncTestCase):
             "Unable to delete resource. Status: %s" % status_code
 
         conn.close()
+
 
     @testing.gen_test(timeout=REQUEST_TIMEOUT)
     def test_subscribe_to_collection_top_level_deleted(self):
@@ -1520,7 +1530,7 @@ class TestWebSocketEvents(testing.AsyncTestCase):
         # which is used for verifying the modification notification.
         update_cfg = {
             "configuration": {
-                "bgp_routers": []
+                "bgp_routers": {}
             }
         }
         info("### Verifying received modified notification for "

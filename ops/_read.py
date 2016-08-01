@@ -16,6 +16,9 @@ import ops.constants
 import ops.utils
 import ovs.db.idl
 
+import ovs.vlog
+vlog = ovs.vlog.Vlog('dc')
+
 
 def get_row_data(row, table_name, schema, idl, index=None):
 
@@ -24,29 +27,22 @@ def get_row_data(row, table_name, schema, idl, index=None):
 
     row_data = {}
 
-    # TODO: Routes are special case - only static routes are returned
-    if table_name == 'Route' and row.__getattr__('from') != 'static':
-        return
+    # NOTE: remove this when we have a proper
+    # solution for TG-1116
+    if table_name == 'VLAN':
+        internal_usage = row.__getattr__('internal_usage')
+        if internal_usage:
+            return None
 
     # Iterate over all columns in the row
     table_schema = schema.ovs_tables[table_name]
-    for column_name in table_schema.config.keys():
-        column_data = row.__getattr__(column_name)
 
-        # Do not include empty columns
-        if column_data is None or column_data == {} or column_data == []:
-            continue
+    # get dyanmic categories
+    categories = ops.utils.get_dynamic_categories(row, table_name, schema, idl)
 
-        row_data[column_name] = column_data
-
-    # get all non-config index columns
-    for key in table_schema.indexes:
-
-        if key is 'uuid':
-            continue
-
-        if key not in table_schema.config.keys():
-            row_data[key] = row.__getattr__(key)
+    # are of type 'status', we skip the row
+    if not ops.utils.has_config_category(categories):
+        return None
 
     # Iterate over all children (forward and backward references) in the row
     for child_name in table_schema.children:
@@ -122,7 +118,7 @@ def get_row_data(row, table_name, schema, idl, index=None):
             row_data[child_name] = children_data
 
     # Iterate through 'references' from table
-    for refname, refobj in table_schema.references.iteritems():
+    for refname, refobj in categories[ops.constants.OVSDB_SCHEMA_REFERENCE].iteritems():
         _min = refobj.n_min
         _max = refobj.n_max
         ref_table_name = table_schema.references[refname].ref_table
@@ -150,22 +146,50 @@ def get_row_data(row, table_name, schema, idl, index=None):
                                                        schema, idl)
                     refdata.update({str(key): str(ref_index)})
             elif isinstance(references, list):
-                refdata = []
-                for ref in references:
-                    ref_index = ops.utils.row_to_index(ref,
-                                                       ref_table_name,
-                                                       schema, idl)
-                    refdata.append(ref_index)
+                if _max == 1:
+                    if len(references)>1:
+                        raise Exception("max 1 entry allowed for column %s " %refname +
+                                        " in table %" % table_name)
+
+                    refdata = ops.utils.row_to_index(references[0],
+                                                     ref_table_name,
+                                                     schema, idl)
+                else:
+                    refdata = []
+                    for ref in references:
+                        ref_index = ops.utils.row_to_index(ref,
+                                                           ref_table_name,
+                                                           schema, idl)
+                        refdata.append(ref_index)
             else:
                 raise Exception("datatype for column %s in " % refname +
                                 "table %s is not supported" % table_name)
 
             row_data[refname] = refdata
 
-    if not row_data:
-        return None
+    for column_name in categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
+        column_data = row.__getattr__(column_name)
 
-    return {index: row_data}
+        # Do not include empty columns
+        if column_data is None or column_data == {} or column_data == [] or column_data == '':
+            continue
+
+        row_data[column_name] = column_data
+
+    if row_data:
+        # get all non-config index columns
+        for key in table_schema.indexes:
+
+            if key is 'uuid':
+                continue
+
+            if key not in categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
+                row_data[key] = row.__getattr__(key)
+
+        vlog.dbg('read row %s with index %s from table %s' % (str(row.uuid), index, table_name))
+        return {index: row_data}
+
+    return None
 
 
 def get_table_data(table_name, schema, idl):
@@ -178,6 +202,7 @@ def get_table_data(table_name, schema, idl):
 
     # If table is empty return None
     if len(table.rows) == 0:
+        vlog.dbg('table %s is empty' % table_name)
         return None
 
     for row in table.rows.itervalues():

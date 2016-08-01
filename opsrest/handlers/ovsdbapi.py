@@ -102,9 +102,12 @@ class OVSDBAPIHandler(base.BaseHandler):
 
             app_log.debug("Query arguments %s" % self.request.query_arguments)
 
-            result = get.get_resource(self.idl, self.resource_path,
-                                      self.schema, self.request.path,
-                                      selector, self.request.query_arguments)
+            result = yield get.get_resource(self.idl, self.resource_path,
+                                            self.schema, self.request.path,
+                                            selector,
+                                            self.request.query_arguments,
+                                            fetch_readonly=True,
+                                            manager=self.ref_object.manager)
 
             if result is None:
                 self.set_status(httplib.NOT_FOUND)
@@ -227,10 +230,10 @@ class OVSDBAPIHandler(base.BaseHandler):
 
             # patch_resource performs data verification, prepares and
             # commits the ovsdb transaction
-            result = patch.patch_resource(update_data,
-                                          self.resource_path,
-                                          self.schema, self.txn,
-                                          self.idl, self.request.path)
+            result = yield patch.patch_resource(update_data,
+                                                self.resource_path,
+                                                self.schema, self.txn,
+                                                self.idl, self.request.path)
 
             status = result.status
             if status == INCOMPLETE:

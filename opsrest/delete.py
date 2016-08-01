@@ -20,6 +20,7 @@ from opsrest.exceptions import MethodNotAllowed, DataValidationFailed
 from opsvalidator import validator
 from opsvalidator.error import ValidationError
 
+import ovs.db.idl
 import httplib
 from tornado.log import app_log
 
@@ -49,17 +50,48 @@ def delete_resource(resource, schema, txn, idl):
         raise DataValidationFailed(e.error)
 
     if resource.relation == OVSDB_SCHEMA_CHILD:
-
         if resource.next.row is None:
-            raise MethodNotAllowed
+            parent = idl.tables[resource.table].rows[resource.row]
+            rows = parent.__getattr__(resource.column)
+            if isinstance(rows, dict):
+                rows = rows.values()
+                parent.__setattr__(resource.column, {})
+            elif isinstance(rows, ovs.db.idl.Row):
+                rows = [rows]
+                parent.__setattr__(resource.column, None)
+            else:
+                parent.__setattr__(resource.column, [])
 
-        row = utils.delete_reference(resource.next, resource, schema, idl)
-        row.delete()
+            # delete rows from the table
+            while len(rows):
+                row = rows.pop()
+                row.delete()
+        else:
+            row = utils.delete_reference(resource.next, resource, schema, idl)
+            row.delete()
 
     elif resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
-        row = utils.get_row_from_resource(resource.next, idl)
-        row.delete()
+        if resource.next.row is None:
+            refcol = None
+            parent = idl.tables[resource.table].rows[resource.row]
+            refkeys = schema.ovs_tables[resource.next.table].references
+            for key, value in refkeys.iteritems():
+                if (value.relation == OVSDB_SCHEMA_PARENT and
+                        value.ref_table == resource.table):
+                    refcol = key
+                    break
 
+            children = []
+            for row in idl.tables[resource.next.table].rows.itervalues():
+                if row.__getattr__(refcol) == parent:
+                    children.append(row.uuid)
+
+            for child in children:
+                row = idl.tables[resource.next.table].rows[child]
+                row.delete()
+        else:
+            row = utils.get_row_from_resource(resource.next, idl)
+            row.delete()
     elif resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
         row = utils.delete_all_references(resource.next, schema, idl)
 

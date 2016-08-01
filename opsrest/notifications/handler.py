@@ -39,6 +39,7 @@ from opsrest.notifications.exceptions import (
 )
 from opsrest.notifications.monitor import OvsdbNotificationMonitor
 from opsrest.notifications.utils import lookup_subscriber_by_name
+from tornado import gen
 
 
 class NotificationHandler():
@@ -66,12 +67,14 @@ class NotificationHandler():
         # self._notification_monitor = \
         #    OvsdbNotificationMonitor(manager.remote,
         #                             manager.schema,
+        #                             self._schema,
         #                             self.subscribed_changes_callback)
 
         # TODO: Remove this code when second monitor is enabled
         self._manager.add_callback(CHANGES_CB_TYPE,
                                    self.subscribed_changes_callback)
 
+    @gen.coroutine
     def create_subscription(self, subscription_name, subscription_row,
                             resource_uri, idl):
         app_log.debug("Creating subscription for %s with URI %s" %
@@ -79,8 +82,7 @@ class NotificationHandler():
 
         resource = parse.parse_url_path(resource_uri, self._schema, idl)
 
-        # Needs to be at least a top-level resource
-        if resource is None or resource.next is None:
+        if resource is None:
             raise SubscriptionInvalidResource("Invalid resource URI " +
                                               resource_uri)
 
@@ -101,6 +103,7 @@ class NotificationHandler():
                                                    self._schema, idl)
 
         # Get the last resource while preserving the parent resource.
+        # None parent resource indicates the System table.
         parent_resource = None
         while resource.next is not None:
             parent_resource = resource
@@ -109,10 +112,13 @@ class NotificationHandler():
         subscriber_name = self._get_subscriber_name(subscriber_row, idl)
 
         subscription = None
-        if is_resource_type_collection(parent_resource):
+        if parent_resource and is_resource_type_collection(parent_resource):
             row_uuids = self.get_collection_row_uuids(parent_resource, idl)
-            uris = get_collection_json(parent_resource, self._schema,
-                                       idl, resource_uri, None, 0)
+            uris = yield get_collection_json(parent_resource, self._schema,
+                                             idl, resource_uri, None, 0)
+
+            if isinstance(uris, dict):
+                uris = uris.values()
 
             rows_to_uri = dict(zip(row_uuids, uris))
 
@@ -126,20 +132,26 @@ class NotificationHandler():
                                            subscription_uri, resource_uri,
                                            resource.row)
 
-        return subscription
+        raise gen.Return(subscription)
 
     def get_collection_row_uuids(self, parent_resource, idl):
         row_uuids = []
 
         if parent_resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
-            rows = parent_resource.next.row
-
-            if not isinstance(rows, list):
-                row_uuids.append(rows)
+            parent_row = idl.tables[parent_resource.table].rows[parent_resource.row]
+            parent_table = parent_resource.table
+            child_table = parent_resource.next.table
+            if parent_resource.next.row is None:
+                rows = utils.get_back_reference_children(parent_row, parent_table,
+                                                         child_table, self._schema, idl)
+                for row in rows:
+                    row_uuids.append(row.uuid)
             else:
-                row_uuids = rows
+                row_uuids.append(parent_resource.next.row)
+
         elif parent_resource.relation == OVSDB_SCHEMA_TOP_LEVEL:
             row_uuids = idl.tables[parent_resource.next.table].rows.keys()
+
         else:
             rows = utils.get_column_data_from_resource(parent_resource,
                                                        idl)
@@ -155,6 +167,7 @@ class NotificationHandler():
 
         return row_uuids
 
+    @gen.coroutine
     def get_ref_rows_to_uri_mapping_from_parent(self, ref_rows, parent_table,
                                                 parent_row_uuid, idl,
                                                 ref_column):
@@ -174,14 +187,15 @@ class NotificationHandler():
             parent_uri = utils.get_reference_uri(parent_table, parent_row,
                                                  self._schema, idl)
 
-            resource_uris = get_column_json(ref_column, parent_row_uuid,
-                                            parent_table, self._schema, idl,
-                                            parent_uri)
+            resource_uris = yield get_column_json(ref_column, parent_row_uuid,
+                                                  parent_table, self._schema,
+                                                  idl, parent_uri)
 
             rows_to_uri = dict(zip(row_uuids, resource_uris))
 
-        return rows_to_uri
+        raise gen.Return(rows_to_uri)
 
+    @gen.coroutine
     def subscription_changes_check_callback(self, manager, idl):
         """
         Callback method invoked by manager of the IDL used for detecting
@@ -214,12 +228,13 @@ class NotificationHandler():
                                                    consts.SUBSCRIPTION_URI)
 
                 try:
-                    subscription = self.create_subscription(subscription_name,
-                                                            subscription_row,
-                                                            resource_uri,
-                                                            idl)
+                    subscription = \
+                        yield self.create_subscription(subscription_name,
+                                                       subscription_row,
+                                                       resource_uri,
+                                                       idl)
 
-                    self.get_initial_values_and_notify(idl, subscription)
+                    yield self.get_initial_values_and_notify(idl, subscription)
                     self.add_subscription(sub_uuid, subscription)
                 except Exception as e:
                     app_log.error("Error while creating subscription: %s" % e)
@@ -228,6 +243,7 @@ class NotificationHandler():
                 app_log.debug("Subscription was deleted.")
                 self.remove_subscription(sub_uuid)
 
+    @gen.coroutine
     def subscribed_changes_callback(self, manager, idl):
         subscriber_notifications = {}
 
@@ -247,7 +263,8 @@ class NotificationHandler():
                 try:
                     sub = subscriber_notifications[subs_name]
                     added, modified, deleted = \
-                        subscription.get_changes(manager, idl, self._schema)
+                        yield subscription.get_changes(manager, idl,
+                                                       self._schema)
 
                     self._add_updates(sub, consts.UPDATE_TYPE_ADDED, added)
                     self._add_updates(sub, consts.UPDATE_TYPE_MODIFIED,
@@ -264,9 +281,11 @@ class NotificationHandler():
             self.notify_subscriber(subscriber_name, changes,
                                    self._subscriber_idl)
 
+    @gen.coroutine
     def get_initial_values_and_notify(self, idl, subscription):
         notify_msg = {}
-        initial_values = subscription.get_initial_values(idl, self._schema)
+        initial_values = yield subscription.get_initial_values(idl,
+                                                               self._schema)
 
         if initial_values:
             self._add_updates(notify_msg, consts.UPDATE_TYPE_ADDED,

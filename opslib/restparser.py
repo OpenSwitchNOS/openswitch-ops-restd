@@ -46,6 +46,16 @@ RELATIONSHIP_MAP = {
     'reference': 'reference'
 }
 
+# On demand fetched tables
+FETCH_TYPE_PARTIAL = 0
+FETCH_TYPE_FULL = 1
+ON_DEMAND_FETCHED_TABLES = {
+    "BGP_Route": FETCH_TYPE_PARTIAL,
+    "BGP_Nexthop": FETCH_TYPE_PARTIAL,
+    "Route": FETCH_TYPE_PARTIAL,
+    "Nexthop": FETCH_TYPE_PARTIAL
+}
+
 
 # Convert name into all lower case and into plural (default) or singular format
 def normalizeName(name, to_plural=True):
@@ -89,7 +99,7 @@ class OVSColumn(object):
     def __init__(self, table_name, column_name, ovs_base_type,
                  is_optional=True, mutable=True, category=None,
                  emptyValue=None, valueMap=None, keyname=None,
-                 col_doc=None, group=None):
+                 col_doc=None, group=None, loadDescription=False):
 
         key_type = ovs_base_type.key
         value_type = ovs_base_type.value
@@ -118,10 +128,10 @@ class OVSColumn(object):
         self.n_min = ovs_base_type.n_min
 
         self.kvs = {}
-        self.process_valuemap(valueMap)
+        self.process_valuemap(valueMap, loadDescription)
         self.desc = col_doc
 
-    def process_valuemap(self, valueMap):
+    def process_valuemap(self, valueMap, loadDescription):
         '''
         Processes information from the valueMap data structure in the
         extended schema and fills the kvs dictionary for this column
@@ -151,10 +161,11 @@ class OVSColumn(object):
             self.kvs[key]['desc'] = None
             self.kvs[key]['group'] = None
 
-            if 'doc' in value:
-                self.kvs[key]['desc'] = ' '.join(value['doc'])
-            if 'group' in value:
-                self.kvs[key]['group'] = value['group']
+            if loadDescription:
+                if 'doc' in value:
+                    self.kvs[key]['desc'] = ' '.join(value['doc'])
+                if 'group' in value:
+                    self.kvs[key]['group'] = value['group']
 
     def process_type(self, base):
         __type = base.type
@@ -207,12 +218,12 @@ class OVSReference(OVSColumn):
     def __init__(self, table_name, column_name, ovs_base_type,
                  is_optional=True, mutable=True, category=None, valueMap=None,
                  keyname=None, col_doc=None, group=None,
-                 relation=OVSDB_SCHEMA_REFERENCE):
+                 relation=OVSDB_SCHEMA_REFERENCE, loadDescription=False):
 
         super(OVSReference, self).__init__(table_name, column_name,
                                            ovs_base_type, is_optional, mutable,
                                            category, None, valueMap, keyname,
-                                           col_doc, group)
+                                           col_doc, group, loadDescription)
 
         key_type = ovs_base_type.key
 
@@ -307,8 +318,11 @@ class OVSTable(object):
 
         self.is_root = is_root
 
-        # list of all column names
+        # List of all column names
         self.columns = []
+
+        # List of read-only column names
+        self.readonly_columns = []
 
         # Is the table in plural form?
         self.is_many = is_many
@@ -353,7 +367,7 @@ class OVSTable(object):
         self.desc = desc
 
     @staticmethod
-    def from_json(_json, name):
+    def from_json(_json, name, loadDescription):
         parser = ovs.db.parser.Parser(_json, 'schema of table %s' % name)
         columns_json = parser.get('columns', [dict])
         mutable = parser.get_optional('mutable', [bool], True)
@@ -368,12 +382,13 @@ class OVSTable(object):
         _title = parser.get_optional('title', [str, unicode])
         _doc = parser.get_optional('doc', [list, str, unicode])
 
-        doc = []
-        if _title:
-            doc = [_title]
-        if _doc:
-            doc.extend(_doc)
-        doc = ' '.join(doc)
+        if loadDescription:
+            doc = []
+            if _title:
+                doc = [_title]
+            if _doc:
+                doc.extend(_doc)
+            doc = ' '.join(doc)
 
         parser.finish()
 
@@ -434,19 +449,20 @@ class OVSTable(object):
             _col_doc = parser.get_optional('doc', [list])
             _group = parser.get_optional('group', [list, str, unicode])
 
-            if _col_doc:
-                col_doc = ' '.join(_col_doc)
-            group = _group
+            if loadDescription:
+                if _col_doc:
+                    col_doc = ' '.join(_col_doc)
+                group = _group
 
             parser.finish()
 
+            is_column_skipped = False
+            is_readonly_column = False
             is_optional = False
             if isinstance(column_json['type'], dict):
                 if ('min' in column_json['type'] and
                         column_json['type']['min'] == 0):
                     is_optional = True
-
-            table.columns.append(column_name)
 
             # An attribute will be able to get marked with relationship
             # and category tags simultaneously. We are utilizing the
@@ -474,29 +490,58 @@ class OVSTable(object):
                                                              keyname,
                                                              col_doc,
                                                              group,
-                                                             _relationship)
+                                                             _relationship,
+                                                             loadDescription)
 
             else:
 
                 # Status and statistics columns are always mutable
                 if category != OVSDB_SCHEMA_CONFIG:
                     _mutable = True
+
                 ovs_column = OVSColumn(table.name, column_name, _type,
                                        is_optional, _mutable, category,
                                        emptyValue, valueMap, keyname,
-                                       col_doc, group)
+                                       col_doc, group, loadDescription)
 
                 # Save the column in its category group
                 if category == OVSDB_SCHEMA_CONFIG:
+                    if name in ON_DEMAND_FETCHED_TABLES and \
+                        ON_DEMAND_FETCHED_TABLES[name] == FETCH_TYPE_FULL:
+                         is_readonly_column = True
+
                     table.config[column_name] = ovs_column
+
                 elif category == OVSDB_SCHEMA_STATUS:
+                    is_readonly_column = True
                     table.status[column_name] = ovs_column
+
                 elif category == OVSDB_SCHEMA_STATS:
+                    is_readonly_column = True
                     table.stats[column_name] = ovs_column
+
+                else:
+                    # Skip columns that do not have a handled relationship or
+                    # category.
+                    is_column_skipped = True
 
             # Add to the array the name of the dynamic column
             if category.dynamic:
                 table.dynamic[column_name] = category
+
+            # If the column is readonly, check if it is an index. Indexes
+            # should not be registered as readonly columns in the case of a
+            # partial fetching. In full fetch, no columns are subscribed to, so
+            # consider all columns as readonly columns
+            if name in ON_DEMAND_FETCHED_TABLES and is_readonly_column:
+                if ON_DEMAND_FETCHED_TABLES[name] == FETCH_TYPE_PARTIAL and \
+                     column_name in table.index_columns:
+                    pass
+                else:
+                    table.readonly_columns.append(str(column_name))
+
+            if not is_column_skipped:
+                table.columns.append(str(column_name))
 
         # Validate dynamic categories consistency
         for column_name, category in table.dynamic.iteritems():
@@ -550,7 +595,7 @@ class RESTSchema(object):
             self.plural_name_map[table.plural_name] = table.name
 
     @staticmethod
-    def from_json(_json):
+    def from_json(_json, loadDescription):
         parser = ovs.db.parser.Parser(_json, 'extended OVSDB schema')
 
         # These are not used (yet), but the parser fails if they are not parsed
@@ -566,9 +611,10 @@ class RESTSchema(object):
         # loaded, they have to be parsed or OVS' Parser will fail
         _groups_doc = parser.get_optional('groups', [dict])
 
-        groups_doc = _groups_doc
-        for group in groups_doc:
-            groups_doc[group] = ' '.join(groups_doc[group]['doc'])
+        if loadDescription:
+            groups_doc = _groups_doc
+            for group in groups_doc:
+                groups_doc[group] = ' '.join(groups_doc[group]['doc'])
 
         parser.finish()
 
@@ -579,7 +625,8 @@ class RESTSchema(object):
 
         tables = {}
         for tableName, tableJson in tablesJson.iteritems():
-            tables[tableName] = OVSTable.from_json(tableJson, tableName)
+            tables[tableName] = OVSTable.from_json(tableJson, tableName,
+                loadDescription)
 
         # Backfill the parent/child relationship info, mostly for
         # parent pointers which cannot be handled in place.
@@ -700,9 +747,10 @@ def _has_config_index(table, schema):
     return False
 
 
-def parseSchema(schemaFile, title=None, version=None):
+def parseSchema(schemaFile, title=None, version=None, loadDescription=False):
 
-    schema = RESTSchema.from_json(ovs.json.from_file(schemaFile))
+    schema = RESTSchema.from_json(ovs.json.from_file(schemaFile),
+                                  loadDescription)
 
     if title is None:
         title = schema.name

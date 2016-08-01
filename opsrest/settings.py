@@ -17,10 +17,15 @@ import custom
 
 from tornado.options import define
 
+define("HTTPS", default=True, help="turn on serving HTTPS")
 define("HTTPS_port", default=443, help="run on the given port", type=int)
 define("HTTP_port", default=80, help="run on the given port", type=int)
+define("listen", default="", help="listen only on the specified address")
 define("config", default=None, help="tornado config file")
 define("debug", default=False, help="debug mode")
+define("create_ssl", default=True, help="create SSL certificate if needed")
+define("force_https", default=True,
+       help="causes all HTTP connections to be redirected to HTTPS")
 
 settings = {}
 settings['logging'] = 'info'
@@ -29,9 +34,8 @@ settings["template_path"] = os.path.join(os.path.dirname(__file__),
                                          "templates")
 settings['ovs_remote'] = 'unix:/var/run/openvswitch/db.sock'
 settings['ovs_schema'] = '/usr/share/openvswitch/vswitch.ovsschema'
-settings['ext_schema'] = '/usr/share/openvswitch/unified.extschema.json'
+settings['ext_schema'] = '/usr/share/openvswitch/openswitch.extschema.json'
 settings['auth_enabled'] = True
-settings['cookie_secret'] = '61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo='
 settings['cfg_db_schema'] = '/usr/share/openvswitch/configdb.ovsschema'
 
 settings["account_schema"] = os.path.join(os.path.dirname(custom.__file__),

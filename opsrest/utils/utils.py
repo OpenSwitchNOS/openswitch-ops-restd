@@ -24,8 +24,10 @@ from opsrest.resource import Resource
 from opsrest.constants import *
 from opsvalidator import validator
 from tornado.log import app_log
-from copy import deepcopy
 from opsrest.exceptions import DataValidationFailed
+from tornado.options import options
+from tornado import gen
+from opslib.restparser import ON_DEMAND_FETCHED_TABLES
 
 
 def get_row_from_resource(resource, idl):
@@ -194,12 +196,12 @@ def delete_reference(resource, parent, schema, idl):
     ref = None
     if schema.ovs_tables[parent.table].references[parent.column].kv_type:
         app_log.debug('Deleting KV type reference')
-        key = resource.index[0]
+        key = resource.index
         parent_row = idl.tables[parent.table].rows[parent.row]
         kv_references = get_column_data_from_row(parent_row, parent.column)
         updated_kv_references = {}
         for k, v in kv_references.iteritems():
-            if str(k) == key:
+            if k == key:
                 ref = v
             else:
                 updated_kv_references[k] = v
@@ -242,6 +244,7 @@ def delete_all_references(resource, schema, idl):
     for table_name, columns_list in tables_reference.iteritems():
         app_log.debug("Table %s" % table_name)
         app_log.debug("Column list %s" % columns_list)
+        table_schema = schema.ovs_tables[table_name]
         #Iterate each row to see wich tuple has the reference
         for uuid, row_ref in idl.tables[table_name].rows.iteritems():
             #Iterate over each reference column and check if has the reference
@@ -249,6 +252,8 @@ def delete_all_references(resource, schema, idl):
                 #get the referenced values
                 reflist = get_column_data_from_row(row_ref, column_name)
                 if reflist is not None:
+                    if table_schema.references[column_name].kv_type:
+                        reflist = reflist.values()
                     #delete the reference on that row and column
                     delete_row_reference(reflist, row, row_ref, column_name)
 
@@ -346,12 +351,17 @@ def set_reference_items(row, data, reference_keys):
     for key in reference_keys:
         if key in data:
             if isinstance(data[key], ovs.db.idl.Row):
-                row.__setattr__(key, data[key])
+                reflist = data[key]
             elif type(data[key]) is types.ListType:
                 reflist = []
                 for item in data[key]:
                     reflist.append(item)
-                row.__setattr__(key, reflist)
+            else:
+                reflist = {}
+                for k, v in data[key].iteritems():
+                    reflist.update({k: v})
+
+            row.__setattr__(key, reflist)
 
 
 def get_attribute_and_type(row, ovs_column):
@@ -623,16 +633,18 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
                     # TODO: check if this row exists in parent table
                     parent_rows = [parent_row]
                 else:
-                    parent_rows = idl.tables[parent].rows
+                    parent_rows = idl.tables[parent].rows.values()
 
-                for item in parent_rows.itervalues():
+                for item in parent_rows:
                     column_data = item.__getattr__(column_name)
 
                     if isinstance(column_data, types.ListType):
+                        count = 0
                         for ref in column_data:
-                            if ref.uuid == row:
-                                index = str(row.uuid)
+                            if ref == row:
+                                index = str(count)
                                 break
+                            count+=1
                     elif isinstance(column_data, types.DictType):
                         for key, value in column_data.iteritems():
                             if value == row:
@@ -651,19 +663,6 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
         index = '/'.join(tmp)
 
     return index
-
-'''
-# Old code
-def escaped_split(s_in):
-    strings = re.split(r'(?<!\\)/', s_in)
-    res_strings = []
-
-    for s in strings:
-        s = s.replace('\\/', '/')
-        res_strings.append(s)
-
-    return res_strings
-'''
 
 
 def escaped_split(s_in):
@@ -699,7 +698,6 @@ def get_reference_parent_uri(table_name, row, schema, idl):
     path = get_parent_trace(table_name, row, schema, idl)
 
     for table_name, indexes in path:
-        # Don't include Open_vSwitch table
         if table_name == OVSDB_SCHEMA_SYSTEM_TABLE:
             continue
 
@@ -830,13 +828,40 @@ def exec_validators_with_resource(idl, schema, resource, http_method):
         child_resource = resource.next
 
     table_name = child_resource.table
-    row = idl.tables[table_name].rows[child_resource.row]
+    if child_resource.row is None and resource.relation == OVSDB_SCHEMA_CHILD:
+        children = p_row.__getattr__(resource.column)
+        if isinstance(children, ovs.db.idl.Row):
+            children = [children]
+        elif isinstance(children, dict):
+            children = children.values()
+        for row in children:
+            validator.exec_validators(idl, schema, table_name, row, http_method,
+                                      p_table_name, p_row)
 
-    validator.exec_validators(idl, schema, table_name, row, http_method,
-                              p_table_name, p_row)
+    elif child_resource.row is None and resource.relation == OVSDB_SCHEMA_BACK_REFERENCE:
+        p_row = idl.tables[p_table_name].rows[resource.row]
+        refcol = None
+        refkeys = schema.ovs_tables[table_name].references
+        for key, value in refkeys.iteritems():
+            if (value.relation == OVSDB_SCHEMA_PARENT and
+                    value.ref_table == p_table_name):
+                refcol = key
+                break
+
+        for row in idl.tables[child_resource.table].rows.itervalues():
+            if row.__getattr__(refcol) == p_row:
+                validator.exec_validators(idl, schema, table_name, row,
+                                          http_method, p_table_name, p_row)
+    else:
+        row = idl.tables[table_name].rows[child_resource.row]
+        validator.exec_validators(idl, schema, table_name, row, http_method,
+                                  p_table_name, p_row)
 
 
 def redirect_http_to_https(current_instance):
+    if not options.force_https:
+        return True
+
     if current_instance.request.protocol == HTTP:
         current_instance.redirect(re.sub(r'^([^:]+)', HTTPS,
                                   current_instance.request.full_url()), True)
@@ -873,14 +898,12 @@ def update_category_keys(keys, row, idl, schema, table):
                       "have dynamic columns")
         return keys
 
-    result_keys = deepcopy(keys)
-
     # Get all columns
     columns = {}
-    columns.update(result_keys[OVSDB_SCHEMA_CONFIG])
-    columns.update(result_keys[OVSDB_SCHEMA_STATUS])
-    columns.update(result_keys[OVSDB_SCHEMA_STATS])
-    references = result_keys[OVSDB_SCHEMA_REFERENCE]
+    columns.update(keys[OVSDB_SCHEMA_CONFIG])
+    columns.update(keys[OVSDB_SCHEMA_STATUS])
+    columns.update(keys[OVSDB_SCHEMA_STATS])
+    references = keys[OVSDB_SCHEMA_REFERENCE]
 
     dynamic_columns = ovs_table.dynamic
     for column_name, category_obj in dynamic_columns.iteritems():
@@ -918,8 +941,8 @@ def update_category_keys(keys, row, idl, schema, table):
         # Check if the category changed
         if prev_category != new_category:
             if column_name in columns:
-                orig_columns = result_keys[prev_category]
-                dest_columns = result_keys[new_category]
+                orig_columns = keys[prev_category]
+                dest_columns = keys[new_category]
                 # Change the category
                 column = orig_columns[column_name]
                 column.category.value = new_category
@@ -931,10 +954,7 @@ def update_category_keys(keys, row, idl, schema, table):
                 reference = references[column_name]
                 reference.category.value = new_category
 
-    # Debugging
-    app_log.debug("Table: %s" % table)
-    app_log.debug("Keys: \n %s \n" % result_keys)
-    return result_keys
+    return keys
 
 
 def update_resource_keys(resource, schema, idl, data=None):
@@ -976,3 +996,125 @@ def get_parent_child_col_and_relation(schema, parent_table, child_table):
                 return (column, OVSDB_SCHEMA_BACK_REFERENCE)
 
     return (None, None)
+
+def row_to_uri(row, table, schema, idl):
+
+    path = []
+    while row:
+        # top level table
+        if not schema.ovs_tables[table].parent:
+            index = str(row_to_index(row, table, schema, idl))
+            path = [index, schema.ovs_tables[table].plural_name]
+            table = OVSDB_SCHEMA_SYSTEM_TABLE
+        else:
+            parent_table = schema.ovs_tables[table].parent
+            parent_row = None
+            if table in schema.ovs_tables[parent_table].children:
+                # backward
+                for x, y in schema.ovs_tables[table].references.iteritems():
+                    if y.relation == OVSDB_SCHEMA_PARENT:
+                        parent_row = row.__getattr__(x)
+                        break
+                index = str(row_to_index(row, table, schema, idl, parent_row))
+                path = path + [index, schema.ovs_tables[table].plural_name]
+            else:
+                # forward
+                for name, column in schema.ovs_tables[parent_table].references.iteritems():
+                    if column.relation == OVSDB_SCHEMA_CHILD and column.ref_table == table:
+                        break
+
+                for item in idl.tables[parent_table].rows.itervalues():
+                    children = item.__getattr__(name)
+                    if isinstance(children, ovs.db.idl.Row):
+                        children = [children]
+                    elif isinstance(children, dict):
+                        children = children.values()
+
+                    if row in children:
+                        parent_row = item
+                        break
+
+                _max = column.n_max
+                if _max == 1:
+                    path = path + [name]
+                else:
+                    index = str(row_to_index(row, table, schema, idl, parent_row))
+                    path = path + [index, name]
+
+            row = parent_row
+            table = parent_table
+
+        if table == OVSDB_SCHEMA_SYSTEM_TABLE:
+            path = path + [OVSDB_SCHEMA_SYSTEM_URI]
+            break
+
+    path.reverse()
+    uri = REST_VERSION_PATH + '/'.join(path)
+    return uri
+
+def get_back_reference_children(parent, parent_table, child_table, schema, idl):
+    references = schema.ovs_tables[child_table].references
+    refcol = None
+    for key, value in references.iteritems():
+        if (value.relation == OVSDB_SCHEMA_PARENT and
+                value.ref_table == parent_table):
+            refcol = key
+            break
+    if refcol is None:
+        return None
+
+    children = []
+    for row in idl.tables[child_table].rows.itervalues():
+        if row.__getattr__(refcol) == parent:
+            children.append(row)
+    return children
+
+@gen.coroutine
+def fetch_readonly_columns(schema, table, idl, manager, rows):
+    """
+    Fetches the columns that were registered as read-only from the DB.
+    The method utilizes commit_block. Top-level caller should invoke this
+    in a coroutine.
+    """
+    if table in ON_DEMAND_FETCHED_TABLES:
+        app_log.debug("Fetching read-only columns..")
+        table_schema = schema.ovs_tables[table]
+        txn = manager.get_new_transaction()
+
+        for row in rows:
+            for column in table_schema.readonly_columns:
+                row.fetch(column)
+
+        status = txn.commit()
+        if status == INCOMPLETE:
+            manager.monitor_transaction(txn)
+            yield txn.event.wait()
+            status = txn.status
+
+        app_log.debug("Fetching status: %s" % status)
+
+
+@gen.coroutine
+def fetch_readonly_columns_for_table(schema, table, idl, manager):
+    """
+    Fetches the columns that were registered as read-only from the DB
+    for all rows in the table.
+
+    The method utilizes commit_block. Top-level caller should invoke this
+    in a coroutine.
+    """
+    if table in ON_DEMAND_FETCHED_TABLES:
+        app_log.debug("Fetching read-only columns for table..")
+        table_schema = schema.ovs_tables[table]
+        txn = manager.get_new_transaction()
+
+        for column in table_schema.readonly_columns:
+            txn.txn.fetch_table(table, column)
+
+        status = txn.commit()
+        if status == INCOMPLETE:
+            manager.monitor_transaction(txn)
+            yield txn.event.wait()
+            status = txn.status
+
+        app_log.debug("Fetching status: %s" % status)
