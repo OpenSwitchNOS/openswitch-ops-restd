@@ -25,6 +25,7 @@ import inflect
 import xml.etree.ElementTree as ET
 
 import ovs.dirs
+from copy import deepcopy
 from ovs.db import error
 from ovs.db import types
 import ovs.util
@@ -320,6 +321,9 @@ class OVSTable(object):
         # column name to OVSColumn object mapping
         self.config = {}
 
+        # Copy of configuration attributes
+        self.default_config = {}
+
         # Dictionary of status attributes (Read-only)
         # column name to OVSColumn object mapping
         self.status = {}
@@ -465,6 +469,10 @@ class OVSTable(object):
 
             if not is_column_skipped:
                 table.columns.append(str(column_name))
+
+        # deepcopy of config attributes to prevent modification
+        # of config attributes when updating dynamic categories
+        table.default_config = deepcopy(table.config)
 
         # Validate dynamic categories consistency
         for column_name, category in table.dynamic.iteritems():
