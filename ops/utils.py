@@ -200,8 +200,8 @@ def set_config_columns(data, row, table, extschema, idl):
 
 def set_default_config_columns(data, row, table, extschema, new=False):
     table_schema = extschema.ovs_tables[table]
-    for key in table_schema.config.keys():
-        if not new and not table_schema.config[key].mutable:
+    for key in table_schema.default_config.keys():
+        if not new and not table_schema.default_config[key].mutable:
             continue
 
         if key not in data:
@@ -219,7 +219,7 @@ def set_default_config_columns(data, row, table, extschema, new=False):
             if key is 'uuid':
                 continue
 
-            if key not in table_schema.config.keys() and key in data:
+            if key not in table_schema.default_config.keys() and key in data:
                 row.__setattr__(key, data[key])
 
     return True
