@@ -19,32 +19,46 @@
 
 
 import http.client
-
+from datetime import datetime
 from rest_utils_ft import execute_request, login, \
     get_switch_ip, rest_sanity_check, create_test_port, \
     get_container_id, PORT_DATA, get_server_crt, \
     remove_server_crt, get_json
-
+from topology_common.ops.configuration_plane.rest.rest \
+    import create_certificate_and_copy_to_host
 from swagger_test_utility import swagger_model_verification
 from pytest import mark
+from rest_utils_physical_ft import set_rest_server, add_ip_devices, \
+    ensure_connectivity, login_to_physical_switch
+from rest_utils_physical_ft import SW_IP, HS_IP, \
+    CRT_DIRECTORY_HS, HTTP_NOT_FOUND, HTTP_OK
+
 
 # Topology definition. the topology contains two back to back switches
 # having four links between them.
 
 TOPOLOGY = """
-# +-----+
-# | sw1 |
-# +-----+
+# +-----+      +-----+
+# | sw1 <------> hs1 |
+# +-----+      +-----+
 
 # Nodes
 [type=openswitch name="Switch 1"] sw1
+[type=host name="Host 1"] hs1
+
+# Ports
+[force_name=oobm] sw1:sp1
+
+# Links
+sw1:sp1 -- hs1:1
 """
 
 SWITCH_IP = None
 switch = None
-# get_switch_ip(net.switches[0])
 PATH = "/rest/v1/system/ports"
 PORT_PATH = PATH + "/Port1"
+DEAULT_PORT_PATH = PATH + "/bridge_normal"
+EMPTY_URL = []
 cookie_header = None
 container_id = None
 
@@ -138,6 +152,62 @@ def query_non_existent_port(step):
         request ##########\n")
 
 
+def query_non_existent_port_ostl(login_result, hs1, step):
+    step("\n########## Test to Validate first GET Non-existent Port \
+         request  ##########\n")
+
+    # The library returns an exception. So catching the exception here
+    # to conform to the test case
+    try:
+        get_result = hs1.libs.openswitch_rest.system_ports_id_get(
+            "Port2",
+            https=CRT_DIRECTORY_HS,
+            cookies=login_result.get('cookies'),
+            request_timeout=5)
+    except:
+        step("Returned None")
+        step("\n########## End Test to Validate first GET Non-existent Port \
+            request ##########\n")
+        return
+    assert get_result.get('status_code') == HTTP_NOT_FOUND
+    step("### Status code is NOT FOUND ###\n")
+
+
+def query_port_ostl(login_result, hs1, step):
+
+    # Create fake port
+    step("Creating test port")
+    post_result = hs1.libs.openswitch_rest.system_ports_post(
+                    PORT_DATA,
+                    https=CRT_DIRECTORY_HS,
+                    cookies=login_result.get('cookies'),
+                    request_timeout=5)
+    print("\n\n\nstatus code %s\n\n" % post_result.get('status_code'))
+
+    get_result = hs1.libs.openswitch_rest.system_ports_id_get(
+        "Port1",
+        https=CRT_DIRECTORY_HS,
+        cookies=login_result.get('cookies'),
+        request_timeout=5)
+    assert get_result.get('status_code') == HTTP_OK
+    print("\n\n\n %s\n\n\n\n" % get_result["content"])
+    assert get_result["content"]["configuration"] is not None, \
+        "configuration key is not present"
+    assert get_result["content"]["statistics"] is not None, \
+        "statistics key is not present"
+    assert get_result["content"]["status"] is not None, \
+        "status key is not present"
+    step("### Configuration, statistics and status keys present ###\n")
+
+    assert get_result["content"]["configuration"] == \
+        PORT_DATA["configuration"], \
+        "Configuration data is not equal that posted data"
+    step("### Configuration data validated ###\n")
+
+    step("\n########## End Test to Validate first GET single Port request \
+        ##########\n")
+
+
 def _setup(step):
     get_server_crt(switch)
     rest_sanity_check(SWITCH_IP)
@@ -156,6 +226,7 @@ def _teardown():
 
 
 @mark.gate
+@mark.platform_incompatible(['ostl'])
 def test_ops_restd_ft_ports_get(topology, step):
     global switch
     switch = topology.get("sw1")
@@ -171,3 +242,48 @@ def test_ops_restd_ft_ports_get(topology, step):
     swagger_model_verification(container_id, "/system/ports/{id}",
                                "GET_ID", PORT_DATA, SWITCH_IP)
     _teardown()
+
+
+def query_all_ports_ostl(login_result, hs1, step):
+    step("\n########## Test to Validate first GET all Ports request \
+          ##########\n")
+
+    get_result = hs1.libs.openswitch_rest.system_ports_get(
+            https=CRT_DIRECTORY_HS,
+            cookies=login_result.get('cookies'),
+            request_timeout=5)
+    assert get_result.get('status_code') == HTTP_OK, \
+        "Response status received: %s\n" % get_result.get('status_code')
+
+    assert get_result["content"] is not None, "Response data is empty"
+    step("### Response data returned: %s ###\n" % get_result["content"])
+
+    step("### There is at least one port  ###\n")
+
+    assert DEAULT_PORT_PATH in get_result["content"], "Port is not in data. \
+                                         Data returned is: %s" \
+                                         % get_result["content"]
+    step("### Port is in list  ###\n")
+
+    step("\n########## End Test to Validate first GET all Ports request \
+        ##########\n")
+
+
+@mark.gate
+@mark.platform_incompatible(['docker'])
+def test_rest_ft_ports_ostl(topology, step):
+    sw1 = topology.get('sw1')
+    hs1 = topology.get('hs1')
+
+    assert sw1 is not None
+    assert hs1 is not None
+    date = str(datetime.now())
+    sw1.send_command('date --set="%s"' % date, shell='bash')
+    add_ip_devices(sw1, hs1, step)
+    ensure_connectivity(hs1, step)
+    set_rest_server(hs1, step)
+    create_certificate_and_copy_to_host(sw1, SW_IP, HS_IP, step=step)
+    login_result = login_to_physical_switch(hs1, step)
+    query_all_ports_ostl(login_result, hs1, step)
+    query_port_ostl(login_result, hs1, step)
+    query_non_existent_port_ostl(login_result, hs1, step)
