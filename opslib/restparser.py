@@ -431,6 +431,7 @@ class OVSTable(object):
             convert_enums(_type)
             valueMap = {}
             if isinstance(_type, dict):
+                _type.pop('omitCodeGeneration', None)
                 valueMap = _type.pop('valueMap', {})
                 if valueMap:
                     _type['key'] = 'string'
