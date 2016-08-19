@@ -14,28 +14,16 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import argparse
+import copy
 import getopt
 import json
-import sys
-import re
-import string
-import copy
 import os
+import sys
 
-import xml.etree.ElementTree as ET
-
-import ovs.dirs
 from ovs.db import error
 from ovs.db import types
-import ovs.util
-import ovs.daemon
-import ovs.db.idl
 
-from restparser import OVSColumn
 from restparser import OVSReference
-from restparser import OVSTable
-from restparser import RESTSchema
 from restparser import normalizeName
 from restparser import parseSchema
 
@@ -576,15 +564,13 @@ def get_ref_key_and_type(table_name, parent_table, schema):
         references = schema.ovs_tables[parent_table].references
         for col_ref_name, ref_table in references.iteritems():
             column_ovsref = references[col_ref_name]
-            if hasattr(column_ovsref, 'column'):
-                column_ref = column_ovsref.column
-                if str(ref_table.ref_table) == table_name:
-                    if hasattr(column_ref, 'keyname'):
-                        keyName = column_ref.keyname
-                        keyname_type = str(column_ref.type)
-                    else:
-                        keyName = None
-                    break
+            if str(ref_table.ref_table) == table_name:
+                if hasattr(column_ovsref, 'keyname'):
+                    keyName = column_ovsref.keyname
+                    keyname_type = str(column_ovsref.type)
+                else:
+                    keyName = None
+                break
 
     return keyName, keyname_type
 
@@ -637,6 +623,7 @@ def genDefinition(table_name, col, definitions):
             else:
                 max = col.rangeMax
             if 'desc' in detail.keys():
+                # TODO strip detail['desc'] from markdown tags
                 desc = detail['desc']
             else:
                 desc = ""
@@ -662,9 +649,11 @@ def genDefinition(table_name, col, definitions):
         sub["description"] = "Key-Value pairs for " + col.name
         return sub
     elif col.is_list:
+        # TODO strip col.desc from markdown tags
         return genBaseTypeList(col.type, col.desc)
     else:
         # simple attributes
+        # TODO strip col.desc from markdown tags
         return genBaseType(col.type, col.rangeMin, col.rangeMax, col.desc)
 
 
@@ -1751,32 +1740,31 @@ def getFullAPI(schema):
     return api
 
 
-def docGen(schemaFile, xmlFile, title=None, version=None):
-    schema = parseSchema(schemaFile, loadDescription=True)
+def docGen(schemaFile, title=None, version=None):
+    #schema = parseSchema(schemaFile, loadDescription=True)
 
-    # Special treat System table as /system resource
-    schema.ovs_tables["System"] = schema.ovs_tables.pop("System")
-    schema.ovs_tables["System"].name = "System"
+    ## Special treat System table as /system resource
+    #schema.ovs_tables["System"] = schema.ovs_tables.pop("System")
+    #schema.ovs_tables["System"].name = "System"
 
-    api = getFullAPI(schema)
-    return json.dumps(api, sort_keys=True, indent=4)
+    #api = getFullAPI(schema)
+    #return json.dumps(api, sort_keys=True, indent=4)
+    return json.dumps({})
 
 
 def usage():
     print """\
 %(argv0)s: REST API documentation generator
-Parse the meta schema file based on OVSDB schema together with its
-accompanying XML documentation file to generate REST API YAML file
-for rendering through swagger.
-usage: %(argv0)s [OPTIONS] SCHEMA XML
+Parse the meta schema file based on OVSDB schema to
+generate REST API YAML file for rendering through swagger.
+usage: %(argv0)s [OPTIONS] SCHEMA
 where SCHEMA is an extended OVSDB schema in JSON format
-  and XML is its accompanying documentation in XML format.
 
 The following options are also available:
   --title=TITLE               use TITLE as title instead of schema name
   --version=VERSION           use VERSION to override
   -h, --help                  display this help message\
-""" % {'argv0': argv0}
+""" % {'argv0': sys.argv[0]}
     sys.exit(0)
 
 
@@ -1787,7 +1775,7 @@ if __name__ == "__main__":
             options, args = getopt.gnu_getopt(sys.argv[1:], 'h',
                                               ['title=', 'version=', 'help'])
         except getopt.GetoptError, geo:
-            sys.stderr.write("%s: %s\n" % (argv0, geo.msg))
+            sys.stderr.write("%s: %s\n" % (sys.argv[0], geo.msg))
             sys.exit(1)
 
         title = None
@@ -1803,11 +1791,11 @@ if __name__ == "__main__":
                 sys.exit(0)
 
         if len(args) != 2:
-            sys.stderr.write("Exactly 2 non-option arguments required "
+            sys.stderr.write("Exactly 1 non-option arguments required "
                              "(use --help for help)\n")
             sys.exit(1)
 
-        s = docGen(args[0], args[1], title, version)
+        s = docGen(args[0], title, version)
         print s
 
     except error.Error, e:
