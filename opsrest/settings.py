@@ -34,7 +34,7 @@ settings["template_path"] = os.path.join(os.path.dirname(__file__),
                                          "templates")
 settings['ovs_remote'] = 'unix:/var/run/openvswitch/db.sock'
 settings['ovs_schema'] = '/usr/share/openvswitch/vswitch.ovsschema'
-settings['ext_schema'] = '/usr/share/openvswitch/openswitch.extschema.json'
+settings['ext_schema'] = '/usr/share/openvswitch/openswitch.opsschema'
 settings['auth_enabled'] = True
 settings['cfg_db_schema'] = '/usr/share/openvswitch/configdb.ovsschema'
 
