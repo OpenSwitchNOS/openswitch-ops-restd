@@ -449,15 +449,9 @@ def verify_valid_attribute_values(request_data, column_data, column_name):
     error_details = ""
     error_message = "Attribute value is invalid for column '%s'." % column_name
 
-    # If data has an enum defined, check for a valid value
-    if column_data.enum:
-
-        enum = set(column_data.enum.as_list())
-        valid = is_value_in_enum(request_data, enum)
-
     # If data has key-values dict defined, check for missing/invalid keys
     # It's assumed type is validated, meaning kvs is defined for dicts only
-    elif column_data.kvs:
+    if column_data.kvs:
 
         valid_keys = set(column_data.kvs.keys())
         data_keys = set(request_data.keys())
@@ -504,6 +498,12 @@ def verify_valid_attribute_values(request_data, column_data, column_name):
                         valid = False
                         error_details += "Invalid value for key '%s'. " % key
                         break
+
+    # If data has an enum defined, check for a valid value
+    elif column_data.enum:
+
+        enum = set(column_data.enum.as_list())
+        valid = is_value_in_enum(request_data, enum)
 
     if not valid:
         if error_details:
