@@ -123,7 +123,7 @@ def verify_post_data(data, resource, schema, idl):
         ref = resource.keys[OVSDB_SCHEMA_REFERENCE][resource.column]
         reference = ref
         if reference.kv_type:
-            keyname = reference.column.keyname
+            keyname = reference.keyname
             if keyname not in _data:
                 error = "Missing keyname attribute to" +\
                         " reference the new resource" +\

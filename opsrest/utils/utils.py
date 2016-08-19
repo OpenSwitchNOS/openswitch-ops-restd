@@ -597,7 +597,7 @@ def create_index(schema, data, resource, row):
         if resource.relation == OVSDB_SCHEMA_CHILD:
             ref = schema.ovs_tables[resource.table].references[resource.column]
             if ref.kv_type:
-                keyname = ref.column.keyname
+                keyname = ref.keyname
                 index = data[str(keyname)]
             else:
                 index = row.uuid

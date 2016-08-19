@@ -69,7 +69,7 @@ def post_resource(data, resource, schema, txn, idl):
 
         ref = schema.ovs_tables[resource.table].references[resource.column]
         if ref.kv_type:
-            keyname = ref.column.keyname
+            keyname = ref.keyname
             utils.add_kv_reference(verified_data[keyname],
                                    new_row, resource, idl)
         else:
