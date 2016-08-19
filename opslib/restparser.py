@@ -312,7 +312,8 @@ class OVSColumnCategory(object):
 
 class OVSTable(object):
     '''__init__() functions as the class constructor'''
-    def __init__(self, name, is_root, is_many=True, desc=None):
+    def __init__(self, name, is_root, is_many=True, desc=None,
+                 groupsDesc=None):
         self.name = name
         self.plural_name = normalizeName(name)
 
@@ -366,6 +367,9 @@ class OVSTable(object):
         # consistency with the 'desc' attribute in OVSColumn
         self.desc = desc
 
+        # Table's documentation strings for group descriptions
+        self.groupsDesc = groupsDesc
+
     @staticmethod
     def from_json(_json, name, loadDescription):
         parser = ovs.db.parser.Parser(_json, 'schema of table %s' % name)
@@ -376,11 +380,13 @@ class OVSTable(object):
         indexes_json = parser.get_optional('indexes', [list], [[]])
 
         doc = None
+        groupsDoc = None
 
         # Though these will not be used if documentation is not
         # loaded, they have to be parsed or OVS' Parser will fail
         _title = parser.get_optional('title', [str, unicode])
         _doc = parser.get_optional('doc', [list, str, unicode])
+        _groups_doc = parser.get_optional('groupDoc', [dict])
 
         if loadDescription:
             doc = []
@@ -389,6 +395,9 @@ class OVSTable(object):
             if _doc:
                 doc.extend(_doc)
             doc = ' '.join(doc)
+
+            if _groups_doc:
+                groupsDoc = _groups_doc
 
         parser.finish()
 
@@ -400,7 +409,8 @@ class OVSTable(object):
         if not columns_json:
             raise error.Error('table must have at least one column', _json)
 
-        table = OVSTable(name, is_root, max_rows != 1, desc=doc)
+        table = OVSTable(name, is_root, max_rows != 1, desc=doc,
+                         groupsDesc=groupsDoc)
         table.index_columns = indexes_json[0]
 
         for column_name, column_json in columns_json.iteritems():
@@ -569,11 +579,10 @@ class OVSTable(object):
 class RESTSchema(object):
     '''Schema for REST interface from an OVSDB database.'''
 
-    def __init__(self, name, version, tables, groups_doc=None):
+    def __init__(self, name, version, tables, doc=None):
         self.name = name
         self.version = version
-        # Documentation for groups
-        self.groups_doc = groups_doc
+        self.doc = doc
         # A dictionary of table name to OVSTable object mappings
         self.ovs_tables = tables
 
@@ -607,15 +616,14 @@ class RESTSchema(object):
         version = parser.get_optional('version', [str, unicode])
         tablesJson = parser.get('tables', [dict])
 
-        groups_doc = None
+        doc = None
         # Though these will not be used if documentation is not
         # loaded, they have to be parsed or OVS' Parser will fail
-        _groups_doc = parser.get_optional('groups', [dict])
+        _doc = parser.get_optional('doc', [list])
 
         if loadDescription:
-            groups_doc = _groups_doc
-            for group in groups_doc:
-                groups_doc[group] = ' '.join(groups_doc[group]['doc'])
+            if _doc:
+                doc = ' '.join(_doc)
 
         parser.finish()
 
@@ -642,7 +650,7 @@ class RESTSchema(object):
                         tables[column.ref_table].children.append(tableName)
                     table.parent = column.ref_table
 
-        return RESTSchema(name, version, tables, groups_doc)
+        return RESTSchema(name, version, tables, doc)
 
 
 def convert_enums(_type):
