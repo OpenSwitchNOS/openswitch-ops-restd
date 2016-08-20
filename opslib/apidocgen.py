@@ -1741,15 +1741,14 @@ def getFullAPI(schema):
 
 
 def docGen(schemaFile, title=None, version=None):
-    #schema = parseSchema(schemaFile, loadDescription=True)
+    schema = parseSchema(schemaFile, loadDescription=True)
 
-    ## Special treat System table as /system resource
-    #schema.ovs_tables["System"] = schema.ovs_tables.pop("System")
-    #schema.ovs_tables["System"].name = "System"
+    # Special treat System table as /system resource
+    schema.ovs_tables["System"] = schema.ovs_tables.pop("System")
+    schema.ovs_tables["System"].name = "System"
 
-    #api = getFullAPI(schema)
-    #return json.dumps(api, sort_keys=True, indent=4)
-    return json.dumps({})
+    api = getFullAPI(schema)
+    return json.dumps(api, sort_keys=True, indent=4)
 
 
 def usage():
