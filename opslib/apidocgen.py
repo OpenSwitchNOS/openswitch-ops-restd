@@ -525,6 +525,10 @@ def getDataType(type):
 
 # Generate definition for a given base type
 def genBaseType(type, min, max, desc):
+
+    if not desc:
+        desc = ''
+
     item = {}
     item["type"] = getDataType(type)
     item["description"] = desc
@@ -546,6 +550,10 @@ def genBaseType(type, min, max, desc):
 
 
 def genBaseTypeList(type, desc):
+
+    if not desc:
+        desc = ''
+
     sub = {}
     sub["type"] = "array"
     sub["description"] = desc
