@@ -20,6 +20,7 @@ import string
 import sys
 
 import inflect
+from markdown import markdown
 
 from copy import deepcopy
 import ovs.daemon
@@ -164,7 +165,8 @@ class OVSColumn(object):
 
             if loadDescription:
                 if 'doc' in value:
-                    self.kvs[key]['desc'] = ' '.join(value['doc'])
+                    self.kvs[key]['desc'] = markdown(' '.join(value['doc']))
+
                 if 'group' in value:
                     self.kvs[key]['group'] = value['group']
 
@@ -398,7 +400,7 @@ class OVSTable(object):
                 doc = [_title]
             if _doc:
                 doc.extend(_doc)
-            doc = ' '.join(doc)
+            doc = markdown(' '.join(doc))
 
             if _groups_doc:
                 groupsDoc = _groups_doc
@@ -466,7 +468,7 @@ class OVSTable(object):
 
             if loadDescription:
                 if _col_doc:
-                    col_doc = ' '.join(_col_doc)
+                    col_doc = markdown(' '.join(_col_doc))
                 group = _group
 
             parser.finish()
@@ -631,7 +633,7 @@ class RESTSchema(object):
 
         if loadDescription:
             if _doc:
-                doc = ' '.join(_doc)
+                doc = markdown(' '.join(_doc))
 
         parser.finish()
 
