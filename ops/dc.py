@@ -153,10 +153,6 @@ def write(data, extschema, idl, txn=None, block=False):
             # set up the non-child table
             _write.setup_table(table_name, data, extschema, idl, txn)
 
-        validation_errors = _write.exec_validators()
-        if validation_errors:
-            return (txn.ERROR, validation_errors)
-
         # iterate over all tables to fill in references
         for table_name, tableschema in extschema.ovs_tables.iteritems():
 
@@ -164,6 +160,10 @@ def write(data, extschema, idl, txn=None, block=False):
                 continue
 
             _write.setup_references(table_name, data, extschema, idl)
+
+        validation_errors = _write.exec_validators()
+        if validation_errors:
+            return (txn.ERROR, validation_errors)
 
     except Exception as e:
         txn.abort()
