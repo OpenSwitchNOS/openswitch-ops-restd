@@ -15,5 +15,5 @@
 settings = {}
 settings['ovs_remote'] = 'unix:/var/run/openvswitch/db.sock'
 settings['ovs_schema'] = '/usr/share/openvswitch/vswitch.ovsschema'
-settings['ext_schema'] = '/usr/share/openvswitch/vswitch.extschema'
+settings['ext_schema'] = '/usr/share/openvswitch/openswitch.opsschema'
 settings['cfg_db_schema'] = '/usr/share/openvswitch/configdb.ovsschema'
