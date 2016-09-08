@@ -17,7 +17,7 @@
 # Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 # 02111-1307, USA.
 
-from pytest import fixture
+from pytest import fixture, mark
 
 from rest_utils_ct import (
     execute_request, get_switch_ip, get_server_crt, remove_server_crt,
@@ -125,6 +125,7 @@ def sanity_check(topology):
     rest_sanity_check(SWITCH_IP)
 
 
+@mark.gate
 def test_restd_ct_bgp_routers_get_bgp_routers(setup, sanity_check,
                                               topology, step):
     step("\n#####################################################\n")
@@ -146,6 +147,7 @@ def test_restd_ct_bgp_routers_get_bgp_routers(setup, sanity_check,
     assert d == aux
 
 
+@mark.gate
 def test_restd_ct_bgp_routers_post_bgp_routers(setup, sanity_check,
                                                topology, step):
     step("\n#####################################################\n")
@@ -170,6 +172,7 @@ def test_restd_ct_bgp_routers_post_bgp_routers(setup, sanity_check,
     assert d == aux
 
 
+@mark.gate
 def test_restd_ct_bgp_routers_put_bgp_routers(setup, sanity_check,
                                               topology, step):
     step("\n#####################################################\n")
@@ -197,6 +200,7 @@ def test_restd_ct_bgp_routers_put_bgp_routers(setup, sanity_check,
     assert d == aux
 
 
+@mark.gate
 def test_restd_ct_bgp_routers_delete_bgp_routers(setup, sanity_check,
                                                  topology, step):
     step("\n#####################################################\n")
