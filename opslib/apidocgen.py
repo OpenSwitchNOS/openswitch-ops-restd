@@ -572,13 +572,15 @@ def get_ref_key_and_type(table_name, parent_table, schema):
         references = schema.ovs_tables[parent_table].references
         for col_ref_name, ref_table in references.iteritems():
             column_ovsref = references[col_ref_name]
-            if str(ref_table.ref_table) == table_name:
-                if hasattr(column_ovsref, 'keyname'):
-                    keyName = column_ovsref.keyname
-                    keyname_type = str(column_ovsref.type)
-                else:
-                    keyName = None
-                break
+            if hasattr(column_ovsref, 'column'):
+                column_ref = column_ovsref.column
+                if str(ref_table.ref_table) == table_name:
+                    if hasattr(column_ref, 'keyname'):
+                        keyName = column_ref.keyname
+                        keyname_type = str(column_ref.type)
+                    else:
+                        keyName = None
+                    break
 
     return keyName, keyname_type
 

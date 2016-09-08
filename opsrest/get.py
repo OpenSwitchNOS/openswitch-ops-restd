@@ -371,8 +371,7 @@ def get_column_json(column, row, table, schema, idl, uri,
         elif isinstance(column_data, dict):
             if fetch_readonly and manager:
                 yield utils.fetch_readonly_columns(schema, table, idl,
-                                                   manager,
-                                                   column_data.values())
+                                                   manager, column_data.values())
             data = {}
             for k, v in column_data.iteritems():
                 data[k] = yield get_row_json(v.uuid, reftable, schema, idl,

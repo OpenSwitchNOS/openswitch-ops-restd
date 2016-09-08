@@ -22,6 +22,7 @@ import sys
 import inflect
 
 from copy import deepcopy
+from copy import deepcopy
 import ovs.daemon
 from ovs.db import error, types
 import ovs.db.idl
@@ -137,11 +138,9 @@ class OVSColumn(object):
         Processes information from the valueMap data structure in the
         extended schema and fills the kvs dictionary for this column
         '''
-
         for key, value in valueMap.iteritems():
 
             self.kvs[key] = {}
-
             # Process the values's type
             base_type = types.BaseType.from_json(value['type'])
             _type, _min, _max = self.process_type(base_type)
@@ -167,7 +166,6 @@ class OVSColumn(object):
                     self.kvs[key]['desc'] = ' '.join(value['doc'])
                 if 'group' in value:
                     self.kvs[key]['group'] = value['group']
-
     def process_type(self, base):
         __type = base.type
         rangeMin = None
@@ -265,9 +263,9 @@ class OVSColumnCategory(object):
 
             if per_value_list:
                 for value_dict in per_value_list:
-                    self.check_category(value_dict['category'])
-                    self.per_value[value_dict['value']] = \
-                        value_dict['category']
+                    self.check_category(value_dict["category"])
+                    self.per_value[value_dict["value"]] = \
+                        value_dict["category"]
 
             self.follows = category.get(OVSDB_CATEGORY_FOLLOWS,
                                         None)
@@ -294,21 +292,21 @@ class OVSColumnCategory(object):
     def validate(self, category):
         if category:
             if isinstance(category, dict):
-                if not (OVSDB_CATEGORY_PERVALUE in category or
-                        OVSDB_CATEGORY_FOLLOWS in category):
-                    raise error.Error('Unknown category object '
-                                      'attributes')
+                if not (OVSDB_CATEGORY_PERVALUE in category
+                        or OVSDB_CATEGORY_FOLLOWS in category):
+                    raise error.Error("Unknown category object "
+                                      "attributes")
 
             elif isinstance(category, (str, unicode)):
                 self.check_category(category)
             else:
-                raise error.Error('Unknown category type %s' % type(category))
+                raise error.Error("Unknown category type %s" % type(category))
 
     def check_category(self, category):
         if category not in [OVSDB_SCHEMA_CONFIG,
                             OVSDB_SCHEMA_STATS,
                             OVSDB_SCHEMA_STATUS]:
-            raise error.Error('Unknown category: %s' % value)
+            raise error.Error("Unknown category: %s" % value)
 
 
 class OVSTable(object):
@@ -424,7 +422,7 @@ class OVSTable(object):
             # per-value: matches the possible value with the desired category
             # follows: Reference to the column used to determine the column
             #          category
-            category = OVSColumnCategory(parser.get_optional('category',
+            category = OVSColumnCategory(parser.get_optional("category",
                                                              [str, unicode,
                                                               dict]))
             relationship = parser.get_optional('relationship', [str, unicode])
@@ -500,6 +498,7 @@ class OVSTable(object):
                                                              _type,
                                                              is_optional,
                                                              _mutable,
+
                                                              category,
                                                              valueMap,
                                                              keyname,
@@ -762,6 +761,18 @@ def _has_config_index(table, schema):
 
     # no indices or no index columns with category configuration
     return False
+
+def parse_columns(node, column):
+    if column.tag == 'column':
+        key = (node.attrib['name'], column.attrib['name'])
+        if key not in xml_column_dict:
+            xml_column_dict[key] = []
+        xml_column_dict[key].append(column)
+
+    elif column.tag == 'group':
+        for group_column in column.getchildren():
+            parse_columns(node, group_column)
+
 
 
 def parseSchema(schemaFile, title=None, version=None, loadDescription=False):
