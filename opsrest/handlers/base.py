@@ -26,10 +26,10 @@ from opsrest.constants import *
 from opsrest.exceptions import (
     APIException,
     AuthenticationFailed,
+    DataValidationFailed,
     NotAuthenticated,
     ParameterNotAllowed,
-    TransactionFailed,
-    DataValidationFailed
+    TransactionFailed
 )
 from opsrest.utils.auditlogutils import audit_log_user_msg, audit
 from opsrest.utils.getutils import get_query_arg
@@ -160,8 +160,9 @@ class BaseHandler(web.RequestHandler):
 
                 app_log.debug("Using resource_id=%s" % item_id)
                 if item_id:
-                    result = yield self.controller.get(item_id,
-                                                       self.get_current_user(),
+                    result = \
+                        yield self.controller.get(item_id,
+                                                  self.get_current_user(),
                                                        selector,
                                                        query_arguments)
                 else:
