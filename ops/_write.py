@@ -42,7 +42,7 @@ def exec_validators():
 
 def _index_to_row(index, table, extschema, idl):
     table_schema = extschema.ovs_tables[table]
-    row = ops.utils.index_to_row(index, table_schema, idl)
+    row = ops.utils.index_to_row(index, extschema, table, idl)
     if row is None and table in global_ref_list:
         if index in global_ref_list[table]:
             row = global_ref_list[table][index]
@@ -166,11 +166,18 @@ def setup_row_references(rowdata, table, extschema, idl):
     categories = ops.utils.get_dynamic_categories(row, table, extschema, idl)
     for name, column in table_schema.references.iteritems():
         category = categories[ops.constants.OVSDB_SCHEMA_REFERENCE][name].category
+        mutable = categories[ops.constants.OVSDB_SCHEMA_REFERENCE][name].mutable
+
         if category != ops.constants.OVSDB_SCHEMA_CONFIG:
             continue
 
         if name in table_schema.children or column.relation == ops.constants.OVSDB_SCHEMA_PARENT:
             continue
+
+        if hasattr(row, name):
+            col_val = row.__getattr__(name)
+            if col_val is not None and not mutable:
+                continue
 
         vlog.dbg('setup reference for column %s in row %s of table %s' % (name, str(row.uuid), table))
         _min = column.n_min
@@ -250,7 +257,7 @@ def setup_row(rowdata, table_name, extschema, idl, txn, row=None, parent=None, p
     # get row reference from table
     new = False
     if row is None:
-        row = ops.utils.index_to_row(row_index, table_schema, idl)
+        row = ops.utils.index_to_row(row_index, extschema,table_name, idl)
 
     if row is None:
         row = ops.utils.insert_row_check(row_data, table_name, extschema, idl, txn)
