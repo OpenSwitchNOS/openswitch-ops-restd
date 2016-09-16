@@ -183,7 +183,7 @@ def get_row_data(row, table_name, schema, idl, index=None):
             if key is 'uuid':
                 continue
 
-            if key not in categories[ops.constants.OVSDB_SCHEMA_CONFIG]:
+            if key not in categories[ops.constants.OVSDB_SCHEMA_CONFIG] and key not in row_data:
                 row_data[key] = row.__getattr__(key)
 
         vlog.dbg('read row %s with index %s from table %s' % (str(row.uuid), index, table_name))

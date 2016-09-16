@@ -100,19 +100,23 @@ def row_to_index(row, table, restschema, idl, parent_row=None):
     else:
         tmp = []
         for item in indexes:
-            tmp.append(urllib.quote(str(row.__getattr__(item)), safe=''))
+            value = row.__getattr__(item)
+            if isinstance(value, ovs.db.idl.Row):
+                refTable = schema.references[item].ref_table
+                value = row_to_index(value, refTable, restschema, idl)
+            tmp.append(urllib.quote(str(value), safe=''))
         index = '/'.join(tmp)
 
     return index
 
 
-def index_to_row(index, table_schema, idl):
+def index_to_row(index, extschema, table, idl):
     """
     This subroutine fetches the row reference using index.
     index is either of type uuid.UUID or is a uri escaped string which contains
     the combination indices that are used to identify a resource.
     """
-    table = table_schema.name
+    table_schema = extschema.ovs_tables[table]
     if isinstance(index, uuid.UUID):
         # index is of type UUID
         if index in idl.tables[table].rows:
@@ -132,9 +136,18 @@ def index_to_row(index, table_schema, idl):
 
         if len(index_values) != len(indexes):
             raise Exception('Combination index error for table %s' % table)
+        updated_index_val = []
+        # Converting reference index to row pointers
+        for key, value in zip(indexes, index_values):
+            if key in table_schema.references.keys():
+                refTable = table_schema.references[key].ref_table
+                refRow = index_to_row(value, extschema, refTable, idl)
+                updated_index_val.append(refRow.uuid)
+            else:
+                updated_index_val.append(value)
 
         # find in IDL index_map
-        return idl.index_to_row_lookup(index_values, table_schema.name)
+        return idl.index_to_row_lookup(updated_index_val, table)
 
 
 def delete_row_check(row, table, extschema, idl):
