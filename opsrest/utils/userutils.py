@@ -56,15 +56,20 @@ def user_exists(username):
     try:
         return pwd.getpwnam(username) is not None
     except KeyError:
-        return False
+        try:
+            return pwd.getpwnam("remote_user") is not None
+        except KeyError:
+            return False
 
 
 def get_user_id(username):
     try:
         return pwd.getpwnam(username).pw_uid
     except KeyError:
-        return None
-
+        try:
+            return pwd.getpwnam("remote_user").pw_uid
+        except KeyError:
+            return None
 
 def get_group_members(group_name):
     all_users = pwd.getpwall()
@@ -84,7 +89,9 @@ def check_user_login_authorization(username):
     if username and user_exists(username):
         permissions = set(rbac.get_user_permissions(username))
         if not permissions:
-            raise AuthenticationFailed('user has no associated permissions')
+            permissions = set(rbac.get_user_permissions("remote_user"))
+            if not permissions:
+                raise AuthenticationFailed('user has no associated permissions')
         # isdisjoint is True if user's permissions and
         # allowed permissions intersection is empty
         if permissions.isdisjoint(ALLOWED_LOGIN_PERMISSIONS):
